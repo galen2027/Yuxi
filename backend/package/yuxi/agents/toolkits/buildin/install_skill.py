@@ -90,7 +90,7 @@
 # ) -> tuple[Path, str]:
 #     """从 Sandbox 路径准备 skill 目录。返回 (本地目录, 原始 skill name)。"""
 #     from yuxi.agents.backends.sandbox import ProvisionerSandboxBackend, resolve_virtual_path
-#     from yuxi.services.skill_service import (
+#     from yuxi.agents.skills.service import (
 #         _parse_skill_markdown,
 #         is_valid_skill_slug,
 #     )
@@ -147,7 +147,7 @@
 # ) -> Command:
 #     """执行异步安装任务的核心逻辑"""
 #     from yuxi.services.remote_skill_install_service import prepare_remote_skills_batch
-#     from yuxi.services.skill_service import (
+#     from yuxi.agents.skills.service import (
 #         import_skill_dir,
 #         normalize_string_list,
 #         sync_thread_readable_skills,

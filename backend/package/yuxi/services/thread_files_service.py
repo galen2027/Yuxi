@@ -27,6 +27,29 @@ def _get_virtual_root() -> str:
     return "/" + prefix.strip("/")
 
 
+def _thread_file_entry(
+    thread_id: str,
+    uid: str,
+    child: Path,
+    *,
+    directory_paths_end_with_slash: bool = False,
+) -> dict[str, Any]:
+    stat = child.stat()
+    child_virtual_path = virtual_path_for_thread_file(thread_id, child, uid=uid)
+    if directory_paths_end_with_slash and child.is_dir() and not child_virtual_path.endswith("/"):
+        child_virtual_path = f"{child_virtual_path}/"
+    return {
+        "path": child_virtual_path,
+        "name": child.name,
+        "is_dir": child.is_dir(),
+        "size": stat.st_size if child.is_file() else 0,
+        "modified_at": utc_isoformat_from_timestamp(stat.st_mtime),
+        "artifact_url": None
+        if child.is_dir()
+        else f"/api/chat/thread/{thread_id}/artifacts/{child_virtual_path.lstrip('/')}",
+    }
+
+
 async def list_thread_files_view(
     *,
     thread_id: str,
@@ -61,20 +84,7 @@ async def list_thread_files_view(
 
     entries: list[dict[str, Any]] = []
     for child in sorted(actual_path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower())):
-        stat = child.stat()
-        child_virtual_path = virtual_path_for_thread_file(thread_id, child, uid=uid)
-        entries.append(
-            {
-                "path": child_virtual_path,
-                "name": child.name,
-                "is_dir": child.is_dir(),
-                "size": stat.st_size if child.is_file() else 0,
-                "modified_at": utc_isoformat_from_timestamp(stat.st_mtime),
-                "artifact_url": None
-                if child.is_dir()
-                else f"/api/chat/thread/{thread_id}/artifacts/{child_virtual_path.lstrip('/')}",
-            }
-        )
+        entries.append(_thread_file_entry(thread_id, uid, child))
 
     return {"path": virtual_path, "files": entries}
 
@@ -84,45 +94,20 @@ def _list_user_data_root_entries(thread_id: str, uid: str, virtual_path: str, re
     entries: list[dict[str, Any]] = []
     thread_root = sandbox_user_data_dir(thread_id)
     for child in sorted(thread_root.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower())):
-        stat = child.stat()
-        child_virtual_path = virtual_path_for_thread_file(thread_id, child, uid=uid)
-        if child.is_dir() and not child_virtual_path.endswith("/"):
-            child_virtual_path = f"{child_virtual_path}/"
-        entries.append(
-            {
-                "path": child_virtual_path,
-                "name": child.name,
-                "is_dir": child.is_dir(),
-                "size": stat.st_size if child.is_file() else 0,
-                "modified_at": utc_isoformat_from_timestamp(stat.st_mtime),
-                "artifact_url": None
-                if child.is_dir()
-                else f"/api/chat/thread/{thread_id}/artifacts/{child_virtual_path.lstrip('/')}",
-            }
-        )
+        entry = _thread_file_entry(thread_id, uid, child, directory_paths_end_with_slash=True)
+        entries.append(entry)
         if recursive and child.is_dir():
-            nested = _list_files_recursive(thread_id, uid, child, child_virtual_path)
+            nested = _list_files_recursive(thread_id, uid, child, entry["path"])
             entries.extend(nested["files"])
 
     workspace_dir = sandbox_workspace_dir(thread_id, uid)
     workspace_virtual_path = virtual_path_for_thread_file(thread_id, workspace_dir, uid=uid)
     if workspace_virtual_path.rstrip("/") not in {str(entry["path"]).rstrip("/") for entry in entries}:
         # workspace lives outside the per-thread root, so expose it as a top-level entry.
-        stat = workspace_dir.stat()
-        if not workspace_virtual_path.endswith("/"):
-            workspace_virtual_path = f"{workspace_virtual_path}/"
-        entries.append(
-            {
-                "path": workspace_virtual_path,
-                "name": workspace_dir.name,
-                "is_dir": True,
-                "size": 0,
-                "modified_at": utc_isoformat_from_timestamp(stat.st_mtime),
-                "artifact_url": None,
-            }
-        )
+        entry = _thread_file_entry(thread_id, uid, workspace_dir, directory_paths_end_with_slash=True)
+        entries.append(entry)
         if recursive:
-            nested = _list_files_recursive(thread_id, uid, workspace_dir, workspace_virtual_path)
+            nested = _list_files_recursive(thread_id, uid, workspace_dir, entry["path"])
             entries.extend(nested["files"])
     return {"path": virtual_path, "files": entries}
 
@@ -131,29 +116,17 @@ def _list_files_recursive(thread_id: str, uid: str, actual_path: Path, virtual_p
     """Recursively scan a directory while preserving viewer virtual paths."""
     entries: list[dict[str, Any]] = []
 
-    def _scan_dir(base_actual_path: Path, base_virtual_path: str):
+    def _scan_dir(base_actual_path: Path):
         try:
             for child in sorted(base_actual_path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower())):
-                stat = child.stat()
-                child_virtual_path = virtual_path_for_thread_file(thread_id, child, uid=uid)
-                entries.append(
-                    {
-                        "path": child_virtual_path,
-                        "name": child.name,
-                        "is_dir": child.is_dir(),
-                        "size": stat.st_size if child.is_file() else 0,
-                        "modified_at": utc_isoformat_from_timestamp(stat.st_mtime),
-                        "artifact_url": None
-                        if child.is_dir()
-                        else f"/api/chat/thread/{thread_id}/artifacts/{child_virtual_path.lstrip('/')}",
-                    }
-                )
+                entry = _thread_file_entry(thread_id, uid, child)
+                entries.append(entry)
                 if child.is_dir():
-                    _scan_dir(child, child_virtual_path)
+                    _scan_dir(child)
         except PermissionError:
             pass
 
-    _scan_dir(actual_path, virtual_path)
+    _scan_dir(actual_path)
     return {"path": virtual_path, "files": entries}
 
 

@@ -268,7 +268,7 @@ async def resolve_agent_resource_options(
     options: dict[str, list[dict[str, str]]] = {}
 
     if "tools" in fields_to_load:
-        from yuxi.services.tool_service import get_tool_metadata
+        from yuxi.agents.toolkits.service import get_tool_metadata
 
         options["tools"] = [
             _resource_option(tool["slug"], tool.get("name"), tool.get("description"))
@@ -285,7 +285,7 @@ async def resolve_agent_resource_options(
             if isinstance(item, dict) and item.get("kb_id")
         ]
     if "mcps" in fields_to_load:
-        from yuxi.services.mcp_service import get_all_mcp_servers
+        from yuxi.agents.mcp.service import get_all_mcp_servers
 
         servers = await get_all_mcp_servers(db)
         options["mcps"] = [
@@ -294,14 +294,14 @@ async def resolve_agent_resource_options(
             if server.enabled and server.slug
         ]
     if "skills" in fields_to_load:
-        from yuxi.services.skill_service import list_accessible_skills
+        from yuxi.agents.skills.service import list_accessible_skills
 
         skills = await list_accessible_skills(db, user)
         options["skills"] = [
             _resource_option(skill.slug, skill.name, skill.description) for skill in skills if skill.slug
         ]
     if "subagents" in fields_to_load:
-        from yuxi.services.subagent_service import get_all_subagents
+        from yuxi.agents.subagents.service import get_all_subagents
 
         subagents = await get_all_subagents(db)
         options["subagents"] = [

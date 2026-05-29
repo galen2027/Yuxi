@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.services.mcp_service import (
+from yuxi.agents.mcp.service import (
     create_mcp_server,
     get_mcp_tools_stats,
     delete_mcp_server,
@@ -90,21 +90,19 @@ async def get_mcp_servers(
         servers = await get_all_mcp_servers(db)
         if current_user.role in ["admin", "superadmin"]:
             return {"success": True, "data": [s.to_dict() for s in servers]}
-        else:
-            # NOTE: 针对普通用户采用高安全显式白名单字段准入投影，使用 getattr 兼容 Mock
-            # 仿真对象和历史数据，避免未来新增敏感字段或审计信息越权泄露
-            data = []
-            for s in servers:
-                data.append(
-                    {
-                        "name": getattr(s, "name", ""),
-                        "description": getattr(s, "description", None),
-                        "icon": getattr(s, "icon", None),
-                        "enabled": bool(getattr(s, "enabled", True)),
-                        "tags": getattr(s, "tags", None) or [],
-                    }
-                )
-            return {"success": True, "data": data}
+
+        data = []
+        for s in servers:
+            data.append(
+                {
+                    "name": getattr(s, "name", ""),
+                    "description": getattr(s, "description", None),
+                    "icon": getattr(s, "icon", None),
+                    "enabled": bool(getattr(s, "enabled", True)),
+                    "tags": getattr(s, "tags", None) or [],
+                }
+            )
+        return {"success": True, "data": data}
     except Exception as e:
         logger.error(f"Failed to get MCP servers: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -185,7 +183,7 @@ async def update_mcp_server_route(
         raise HTTPException(status_code=400, detail=f"传输类型必须是 {', '.join(valid_transports)} 之一")
 
     try:
-        fields_set = getattr(request, "model_fields_set", getattr(request, "__fields_set__", set()))
+        fields_set = request.model_fields_set
         update_kwargs = {}
         if "env" in fields_set:
             update_kwargs["env"] = request.env
@@ -399,7 +397,7 @@ async def toggle_mcp_server_tool_route(
 ):
     """切换单个工具的启用状态"""
     try:
-        enabled, server = await toggle_tool_enabled(db, slug, tool_name, current_user.username)
+        enabled, _ = await toggle_tool_enabled(db, slug, tool_name, current_user.username)
         return {
             "success": True,
             "tool_name": tool_name,

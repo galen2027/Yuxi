@@ -93,27 +93,27 @@
             </a-dropdown>
           </template>
 
-          <template #header-right="{ isAgentPanelOpen, hasActiveThread, toggleAgentPanel }">
+          <template #header-right="{ sideActive, hasActiveThread, toggleAgentPanel }">
             <button
               v-if="hasActiveThread"
               type="button"
               class="agent-nav-btn agent-state-btn"
-              :class="{ active: isAgentPanelOpen }"
+              :class="{ active: sideActive === 'file' }"
               title="查看文件"
               @click.stop="toggleAgentPanel"
             >
               <FolderKanban size="18" class="nav-btn-icon" />
               <span class="hide-text">文件</span>
             </button>
-            <div
+            <button
               v-if="userStore.isAdmin && selectedAgentId"
               ref="moreButtonRef"
               type="button"
               class="agent-nav-btn"
-              @click="toggleMoreMenu"
+              @click.stop="toggleMoreMenu"
             >
               <Ellipsis size="18" class="nav-btn-icon" />
-            </div>
+            </button>
           </template>
         </AgentChatComponent>
       </div>

@@ -4,7 +4,7 @@ from yuxi.agents.models import load_chat_model
 from yuxi.models.chat import select_model
 from yuxi.models.embed import OtherEmbedding, select_embedding_model
 from yuxi.models.rerank import OpenAIReranker, get_reranker
-from yuxi.services.model_cache import ModelInfo
+from yuxi.models.providers.cache import ModelInfo
 
 
 def _model_info(model_type: str) -> ModelInfo:

@@ -5,7 +5,7 @@ import httpx
 import numpy as np
 import requests
 
-from yuxi.services.model_cache import model_cache
+from yuxi.models.providers.cache import model_cache
 from yuxi.utils import get_docker_safe_url, hashstr, logger
 
 

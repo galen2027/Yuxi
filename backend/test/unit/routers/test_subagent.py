@@ -327,7 +327,7 @@ def test_update_subagent_status_not_found(monkeypatch):
 class TestSubAgentRepository:
     @pytest.mark.asyncio
     async def test_list_all(self):
-        from yuxi.repositories.subagent_repository import SubAgentRepository
+        from yuxi.agents.subagents.repository import SubAgentRepository
 
         mock_db = AsyncMock()
         mock_result = MagicMock()
@@ -357,7 +357,7 @@ class TestSubAgentRepository:
 
     @pytest.mark.asyncio
     async def test_get_by_slug_found(self):
-        from yuxi.repositories.subagent_repository import SubAgentRepository
+        from yuxi.agents.subagents.repository import SubAgentRepository
 
         mock_db = AsyncMock()
         mock_result = MagicMock()
@@ -384,7 +384,7 @@ class TestSubAgentRepository:
 
     @pytest.mark.asyncio
     async def test_get_by_slug_not_found(self):
-        from yuxi.repositories.subagent_repository import SubAgentRepository
+        from yuxi.agents.subagents.repository import SubAgentRepository
 
         mock_db = AsyncMock()
         mock_result = MagicMock()
@@ -398,7 +398,7 @@ class TestSubAgentRepository:
 
     @pytest.mark.asyncio
     async def test_update_can_clear_model_when_provided(self):
-        from yuxi.repositories.subagent_repository import SubAgentRepository
+        from yuxi.agents.subagents.repository import SubAgentRepository
 
         mock_db = AsyncMock()
         repo = SubAgentRepository(mock_db)
@@ -438,7 +438,7 @@ class TestSubAgentRepository:
 class TestSubAgentService:
     @pytest.mark.asyncio
     async def test_init_builtin_subagents_creates_agents(self, monkeypatch):
-        from yuxi.services import subagent_service as service_module
+        from yuxi.agents.subagents import service as service_module
 
         created_agents = []
 
@@ -479,7 +479,7 @@ class TestSubAgentService:
 
     @pytest.mark.asyncio
     async def test_get_subagent_specs_returns_list(self, monkeypatch):
-        from yuxi.services import subagent_service as service_module
+        from yuxi.agents.subagents import service as service_module
 
         mock_spec = {
             "slug": "test-agent",
@@ -513,7 +513,7 @@ class TestSubAgentService:
 
     @pytest.mark.asyncio
     async def test_get_subagent_specs_returns_defensive_copy(self, monkeypatch):
-        from yuxi.services import subagent_service as service_module
+        from yuxi.agents.subagents import service as service_module
 
         service_module._subagent_specs_cache = [
             {
@@ -611,7 +611,7 @@ class TestSubAgentModel:
 class TestDeepAgentSubagentSelection:
     @pytest.mark.asyncio
     async def test_get_subagents_from_slugs_filters_and_resolves_tools(self, monkeypatch):
-        from yuxi.services import subagent_service as service_module
+        from yuxi.agents.subagents import service as service_module
 
         async def fake_get_specs(_db=None):
             return [
@@ -644,7 +644,7 @@ class TestDeepAgentSubagentSelection:
 
     @pytest.mark.asyncio
     async def test_get_subagents_from_slugs_none_selects_none(self, monkeypatch):
-        from yuxi.services import subagent_service as service_module
+        from yuxi.agents.subagents import service as service_module
 
         async def fake_get_specs(_db=None):
             return [

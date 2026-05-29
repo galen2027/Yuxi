@@ -23,7 +23,7 @@ from yuxi.agents.backends.sandbox import (
     virtual_path_for_thread_file,
 )
 from yuxi.agents.backends.skills_backend import SelectedSkillsReadonlyBackend
-from yuxi.services.skill_service import normalize_string_list
+from yuxi.agents.skills.service import normalize_string_list
 from yuxi.services.filesystem_service import _resolve_filesystem_state
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import utc_isoformat_from_timestamp
@@ -213,28 +213,6 @@ def _remap_prefixed_entry(entry: dict, prefix: str) -> dict:
     }
 
 
-def _normalize_entries(entries: list[dict]) -> list[dict]:
-    normalized: list[dict] = []
-    for entry in entries or []:
-        raw_path = str(entry.get("path") or "")
-        if not raw_path:
-            continue
-        is_dir = bool(entry.get("is_dir", False))
-        display_path = raw_path
-        if is_dir and not display_path.endswith("/"):
-            display_path = f"{display_path}/"
-        normalized.append(
-            {
-                "path": display_path,
-                "name": PurePosixPath(display_path.rstrip("/")).name or display_path,
-                "is_dir": is_dir,
-                "size": int(entry.get("size", 0) or 0),
-                "modified_at": str(entry.get("modified_at", "") or ""),
-            }
-        )
-    return normalized
-
-
 def _sort_entries(entries: list[dict]) -> list[dict]:
     """Sort entries: folders first, then files alphabetically."""
     return sorted(
@@ -337,7 +315,7 @@ async def _resolve_viewer_state(
     current_user: User,
     db: AsyncSession,
 ):
-    _conversation, runtime_context = await _resolve_filesystem_state(
+    runtime_context = await _resolve_filesystem_state(
         thread_id=thread_id,
         user=current_user,
         db=db,

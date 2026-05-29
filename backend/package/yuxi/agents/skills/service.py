@@ -17,8 +17,8 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi import config as sys_config
-from yuxi.repositories.skill_repository import SkillRepository
-from yuxi.services.mcp_service import get_enabled_mcp_server_slugs
+from yuxi.agents.skills.repository import SkillRepository
+from yuxi.agents.mcp.service import get_enabled_mcp_server_slugs
 from yuxi.storage.postgres.models_business import Skill, User
 from yuxi.utils.logging_config import logger
 
@@ -420,7 +420,7 @@ async def list_skill_slugs(db: AsyncSession, *, user: User | None = None) -> lis
 async def get_skill_dependency_options(
     db: AsyncSession, user: User, slug: str | None = None
 ) -> dict[str, list[str] | list[dict]]:
-    from yuxi.services.tool_service import get_tool_metadata
+    from yuxi.agents.toolkits.service import get_tool_metadata
 
     def get_tools():
         all_tools = get_tool_metadata()
@@ -443,7 +443,7 @@ async def get_skill_dependency_options(
 
 def _get_all_tool_names() -> list[str]:
     """获取所有工具名称（包括 buildin 和其他来源）"""
-    from yuxi.services.tool_service import get_tool_metadata
+    from yuxi.agents.toolkits.service import get_tool_metadata
 
     all_tools = get_tool_metadata()
     return [tool["slug"] for tool in all_tools]
@@ -656,31 +656,6 @@ def _build_default_share_payload(operator: User) -> dict[str, Any]:
         "default_share_config": default_share_config,
         "allowed_access_levels": get_allowed_skill_access_levels(operator),
     }
-
-
-def _write_skill_draft(
-    *,
-    operator: User,
-    source_type: str,
-    source: str | None,
-    items: list[dict[str, Any]],
-) -> dict[str, Any]:
-    _cleanup_expired_skill_drafts()
-    draft_id = str(uuid.uuid4())
-    draft_dir = get_skill_drafts_root_dir() / draft_id
-    draft_dir.mkdir(parents=True, exist_ok=False)
-    data = {
-        "draft_id": draft_id,
-        "created_by": operator.uid,
-        "source_type": source_type,
-        "source": source,
-        "created_at": time.time(),
-        "expires_at": time.time() + SKILL_DRAFT_TTL_SECONDS,
-        "items": items,
-        **_build_default_share_payload(operator),
-    }
-    (draft_dir / "metadata.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    return data
 
 
 async def _import_skill_dir_impl(

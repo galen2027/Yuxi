@@ -26,7 +26,6 @@ export const useDatabaseStore = defineStore('database', () => {
     listLoading: false,
     creating: false,
     databaseLoading: false,
-    refrashing: false,
     searchLoading: false,
     lock: false,
     fileDetailModalVisible: false,

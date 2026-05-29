@@ -12,16 +12,34 @@
           </div>
         </div>
         <div class="header__right">
+          <button
+            v-if="showTodoEntry"
+            type="button"
+            class="agent-nav-btn agent-state-btn todo-state-btn"
+            :class="{ active: sideActive === 'todo' }"
+            title="查看待办"
+            @click.stop="toggleTodoPanel"
+          >
+            <SquareCheck size="18" class="nav-btn-icon" />
+            <span class="hide-text">待办</span>
+          </button>
           <slot
             name="header-right"
-            :is-agent-panel-open="isAgentPanelOpen"
+            :side-active="sideActive"
             :has-active-thread="!!currentChatId"
             :toggle-agent-panel="toggleAgentPanel"
           ></slot>
         </div>
       </div>
 
-      <div class="chat-content-container" :class="{ 'has-agent-panel': isAgentPanelOpen }">
+      <div
+        ref="chatContentContainerRef"
+        class="chat-content-container"
+        :class="{
+          'has-file-panel': sideActive === 'file',
+          'has-todo-panel': sideActive === 'todo'
+        }"
+      >
         <!-- Main Chat Area -->
         <div class="chat-main" ref="chatMainRef">
           <div class="chat-box">
@@ -110,8 +128,6 @@
                 :mention="mentionConfig"
                 :thread-id="currentChatId"
                 :supports-file-upload="supportsFileUpload"
-                :has-active-thread="!!currentChatId"
-                :todos="currentTodos"
                 :attachments="currentPendingThreadAttachments"
                 @send="handleSendOrStop"
                 @upload-attachment="handleAttachmentUpload"
@@ -142,18 +158,18 @@
         <!-- Agent Panel Area -->
 
         <div
-          class="agent-panel-wrapper"
+          class="side-panel side-panel--file"
           ref="panelWrapperRef"
           :class="{
-            'is-visible': isAgentPanelOpen,
+            'is-visible': sideActive === 'file',
             'no-transition': isResizing
           }"
           :style="{
-            flexBasis: isAgentPanelOpen ? `${panelRatio * 100}%` : '0px'
+            flexBasis: sideActive === 'file' ? `${panelRatio * 100}%` : '0px'
           }"
         >
           <AgentPanel
-            v-if="isAgentPanelOpen"
+            v-if="sideActive === 'file'"
             :agent-state="currentAgentState"
             :thread-id="currentChatId"
             :panel-ratio="panelRatio"
@@ -169,6 +185,42 @@
             @close-preview-path="closePanelPreviewPath"
             @view-mode-change="setAgentPanelViewMode"
           />
+        </div>
+
+        <div
+          class="side-panel side-panel--todo"
+          :class="{ 'is-visible': sideActive === 'todo' }"
+          :style="{
+            flexBasis: sideActive === 'todo' ? '320px' : '0px'
+          }"
+        >
+          <div v-if="sideActive === 'todo'" class="todo-panel">
+            <div class="side-panel__header todo-panel-header">
+              <span class="todo-panel-title">当前任务</span>
+              <span class="todo-panel-progress">{{ todoProgress }}%</span>
+            </div>
+
+            <div class="todo-panel-body">
+              <div class="todo-panel-list">
+                <div
+                  v-for="(todo, index) in currentTodos"
+                  :key="`${todo.content}-${index}`"
+                  class="todo-item"
+                >
+                  <div class="todo-item-icon" :class="todo.status || 'unknown'">
+                    <CheckCircleOutlined v-if="todo.status === 'completed'" />
+                    <SyncOutlined v-else-if="todo.status === 'in_progress'" spin />
+                    <ClockCircleOutlined v-else-if="todo.status === 'pending'" />
+                    <CloseCircleOutlined v-else-if="todo.status === 'cancelled'" />
+                    <QuestionCircleOutlined v-else />
+                  </div>
+                  <div class="todo-item-body">
+                    <span class="todo-item-text">{{ todo.content }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -188,6 +240,14 @@ import {
   onDeactivated
 } from 'vue'
 import { message } from 'ant-design-vue'
+import { SquareCheck } from 'lucide-vue-next'
+import {
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
+  QuestionCircleOutlined,
+  SyncOutlined
+} from '@ant-design/icons-vue'
 import AgentInputArea from '@/components/AgentInputArea.vue'
 import AgentMessageComponent from '@/components/AgentMessageComponent.vue'
 import RefsComponent from '@/components/RefsComponent.vue'
@@ -284,7 +344,7 @@ const localUIState = reactive({
 })
 
 // Agent Panel State
-const isAgentPanelOpen = ref(false)
+const sideActive = ref('')
 const isResizing = ref(false)
 const defaultPanelRatio = 0.3
 const previewPanelRatio = 0.65
@@ -295,14 +355,15 @@ const panelRatio = ref(defaultPanelRatio) // 面板宽度比例 (0-1)
 const agentPanelPreviewTabs = ref([])
 const agentPanelActivePreviewPath = ref('')
 const agentPanelViewMode = ref('tree')
+const chatContentContainerRef = ref(null)
 const panelWrapperRef = ref(null) // 直接操作 DOM
 let resizeStartX = 0
 let resizeStartWidth = 0
 let panelContainerWidth = 0
 
 const getPanelContainerWidth = () => {
-  const container = document.querySelector('.chat-content-container')
-  return container ? container.clientWidth : window.innerWidth
+  const container = chatContentContainerRef.value || panelWrapperRef.value?.parentElement
+  return container?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 0)
 }
 
 const getMaxPanelRatio = (containerWidth = getPanelContainerWidth()) => {
@@ -315,6 +376,24 @@ const getMaxPanelRatio = (containerWidth = getPanelContainerWidth()) => {
 
 const clampPanelRatio = (ratio, containerWidth = getPanelContainerWidth()) => {
   return Math.max(minPanelRatio, Math.min(ratio, getMaxPanelRatio(containerWidth)))
+}
+
+const setPanelRatioForViewMode = () => {
+  const hasPreview = Boolean(agentPanelActivePreviewPath.value)
+  panelRatio.value = clampPanelRatio(hasPreview ? previewPanelRatio : defaultPanelRatio)
+}
+
+const showFilePanel = (mode = 'tree') => {
+  sideActive.value = 'file'
+  agentPanelViewMode.value = mode === 'preview' && agentPanelActivePreviewPath.value ? 'preview' : 'tree'
+  setPanelRatioForViewMode()
+}
+
+const showFileTreePanel = () => {
+  sideActive.value = 'file'
+  agentPanelActivePreviewPath.value = ''
+  agentPanelViewMode.value = 'tree'
+  setPanelRatioForViewMode()
 }
 
 const getPanelFileName = (file) => {
@@ -335,7 +414,7 @@ const isSameOrChildPanelPath = (path, targetPath) => {
 }
 
 const resetAgentPanelState = () => {
-  isAgentPanelOpen.value = false
+  sideActive.value = ''
   panelRatio.value = defaultPanelRatio
   agentPanelPreviewTabs.value = []
   agentPanelActivePreviewPath.value = ''
@@ -345,17 +424,13 @@ const resetAgentPanelState = () => {
 const setAgentPanelViewMode = (mode) => {
   agentPanelViewMode.value =
     mode === 'preview' && agentPanelActivePreviewPath.value ? 'preview' : 'tree'
-
-  if (agentPanelActivePreviewPath.value) {
-    panelRatio.value = clampPanelRatio(previewPanelRatio)
-  }
+  setPanelRatioForViewMode()
 }
 
 const activatePanelPreview = (path) => {
   if (!path) return
   agentPanelActivePreviewPath.value = path
-  agentPanelViewMode.value = 'preview'
-  panelRatio.value = clampPanelRatio(previewPanelRatio)
+  showFilePanel('preview')
 }
 
 const openPanelPreview = (file, keepTreeOpen = false) => {
@@ -376,10 +451,8 @@ const openPanelPreview = (file, keepTreeOpen = false) => {
     agentPanelPreviewTabs.value = [...agentPanelPreviewTabs.value, tab]
   }
 
-  isAgentPanelOpen.value = true
-  panelRatio.value = clampPanelRatio(previewPanelRatio)
   agentPanelActivePreviewPath.value = tab.path
-  agentPanelViewMode.value = keepTreeOpen ? 'tree' : 'preview'
+  showFilePanel(keepTreeOpen ? 'tree' : 'preview')
 }
 
 const closePanelPreviewTab = (path) => {
@@ -394,6 +467,7 @@ const closePanelPreviewTab = (path) => {
   const nextActiveTab = nextTabs[Math.min(closingIndex, nextTabs.length - 1)]
   agentPanelActivePreviewPath.value = nextActiveTab?.path || ''
   agentPanelViewMode.value = nextActiveTab ? 'preview' : 'tree'
+  setPanelRatioForViewMode()
 }
 
 const closePanelPreviewPath = (targetPath) => {
@@ -410,6 +484,7 @@ const closePanelPreviewPath = (targetPath) => {
   const nextActiveTab = nextTabs[0]
   agentPanelActivePreviewPath.value = nextActiveTab?.path || ''
   agentPanelViewMode.value = nextActiveTab ? 'preview' : 'tree'
+  setPanelRatioForViewMode()
 }
 
 // ==================== COMPUTED PROPERTIES ====================
@@ -472,6 +547,15 @@ const currentArtifacts = computed(() => {
 const currentTodos = computed(() => {
   const todos = currentAgentState.value?.todos
   return Array.isArray(todos) ? todos : []
+})
+const totalTodoCount = computed(() => currentTodos.value.length)
+const completedTodoCount = computed(
+  () => currentTodos.value.filter((todo) => todo?.status === 'completed').length
+)
+const showTodoEntry = computed(() => Boolean(currentChatId.value && totalTodoCount.value > 0))
+const todoProgress = computed(() => {
+  if (!totalTodoCount.value) return 0
+  return Math.round((completedTodoCount.value / totalTodoCount.value) * 100)
 })
 
 const { mentionConfig } = useAgentMentionConfig({
@@ -997,7 +1081,7 @@ const refreshThreadFilesAndAttachments = async (threadId) => {
 const handleArtifactSaved = async () => {
   if (!currentChatId.value) return
   await refreshThreadFilesAndAttachments(currentChatId.value)
-  isAgentPanelOpen.value = true
+  showFileTreePanel()
 }
 
 const fetchAgentState = async (agentId, threadId) => {
@@ -1057,7 +1141,7 @@ const handleTmpAttachmentsAdded = async () => {
     fetchAgentState(currentAgentId.value, threadId),
     refreshThreadFilesAndAttachments(threadId)
   ])
-  isAgentPanelOpen.value = true
+  showFileTreePanel()
 }
 
 const handleAttachmentRemove = async (attachment) => {
@@ -1421,17 +1505,20 @@ const handleAgentStateRefresh = async (threadId = null) => {
   ])
 }
 
-const toggleAgentPanel = async () => {
-  const nextOpen = !isAgentPanelOpen.value
-  isAgentPanelOpen.value = nextOpen
+const toggleTodoPanel = () => {
+  sideActive.value = sideActive.value === 'todo' ? '' : 'todo'
+}
 
-  if (nextOpen) {
-    agentPanelViewMode.value = agentPanelActivePreviewPath.value ? 'preview' : 'tree'
-    panelRatio.value = agentPanelActivePreviewPath.value
-      ? clampPanelRatio(previewPanelRatio)
-      : clampPanelRatio(defaultPanelRatio)
-    await handleAgentStateRefresh()
+const toggleAgentPanel = async () => {
+  const nextOpen = sideActive.value !== 'file'
+
+  if (!nextOpen) {
+    sideActive.value = ''
+    return
   }
+
+  showFileTreePanel()
+  await handleAgentStateRefresh()
 }
 
 // 处理面板宽度调整（使用比例）
@@ -1678,6 +1765,12 @@ onMounted(async () => {
   scrollController.enableAutoScroll()
 })
 
+watch(showTodoEntry, (visible) => {
+  if (!visible && sideActive.value === 'todo') {
+    sideActive.value = ''
+  }
+})
+
 watch(
   currentAgentId,
   async (newAgentId, oldAgentId) => {
@@ -1841,38 +1934,65 @@ watch(currentChatId, (threadId, oldThreadId) => {
   scrollbar-width: none;
 }
 
-.agent-panel-wrapper {
+.side-panel {
   flex: 0 0 auto;
-  align-self: stretch;
-  height: auto;
   overflow: hidden;
+  background: var(--gray-0);
+  border: 1px solid var(--gray-150);
+  border-radius: 16px;
+  box-shadow:
+    0 16px 40px rgba(15, 23, 42, 0.1),
+    0 2px 10px rgba(15, 23, 42, 0.06);
   z-index: 20;
   margin: 0 8px 8px;
-  margin-left: 0;
-  background: var(--gray-0);
-  border-radius: 16px;
-  border: 1px solid var(--gray-150);
+  margin-left: -16px;
   min-width: 0;
-  will-change: flex-basis;
-}
-
-/* Workbench transition animations */
-.agent-panel-wrapper {
-  transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: 0;
   transform: translateX(10px);
-  margin-left: -16px;
+  will-change: flex-basis;
+  transition:
+    flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.agent-panel-wrapper.is-visible {
+.side-panel.is-visible {
   opacity: 1;
   transform: translateX(0);
   margin-left: 0;
+}
+
+.side-panel.no-transition {
+  transition: none !important;
+}
+
+.side-panel--file {
+  align-self: stretch;
+  height: auto;
+}
+
+.side-panel--file.is-visible {
   min-width: 320px;
 }
 
-.agent-panel-wrapper.no-transition {
-  transition: none !important;
+.side-panel--todo {
+  align-self: flex-start;
+  height: min(420px, calc(100% - 8px));
+  min-height: 240px;
+  max-width: min(320px, calc(100vw - 24px));
+  box-shadow: 0 4px 16px var(--shadow-0);
+}
+
+.side-panel--todo.is-visible {
+  min-width: 280px;
+}
+
+.todo-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--gray-0);
 }
 
 .chat-greeting-input {
@@ -2168,22 +2288,30 @@ watch(currentChatId, (threadId, oldThreadId) => {
 }
 
 @media (max-width: 1024px) {
-  .chat-content-container.has-agent-panel .chat-main {
+  .chat-content-container.has-file-panel .chat-main,
+  .chat-content-container.has-todo-panel .chat-main {
     min-width: 350px;
   }
 
-  .agent-panel-wrapper.is-visible {
+  .side-panel--file.is-visible,
+  .side-panel--todo.is-visible {
     max-width: calc(100% - 350px);
   }
 }
 
 @media (max-width: 768px) {
-  .chat-content-container.has-agent-panel .chat-main {
+  .chat-content-container.has-file-panel .chat-main,
+  .chat-content-container.has-todo-panel .chat-main {
     min-width: 0;
   }
 
-  .agent-panel-wrapper.is-visible {
+  .side-panel--file.is-visible {
     min-width: 280px;
+    max-width: 80%;
+  }
+
+  .side-panel--todo.is-visible {
+    min-width: 260px;
     max-width: 80%;
   }
 
@@ -2270,6 +2398,105 @@ watch(currentChatId, (threadId, oldThreadId) => {
   }
 }
 
+.side-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 12px;
+  background: var(--gray-25);
+  border-bottom: 1px solid var(--gray-100);
+  flex-shrink: 0;
+}
+
+.todo-state-btn.active {
+  color: var(--main-700);
+  background-color: var(--main-20);
+}
+
+.todo-panel-header {
+  padding: 10px 14px;
+}
+
+.todo-panel-title {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.todo-panel-body {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.todo-panel-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.todo-item:last-child {
+  border-bottom: none;
+}
+
+.todo-item-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--gray-50);
+  color: var(--gray-500);
+
+  &.completed {
+    background: var(--color-success-10);
+    color: var(--color-success-700);
+  }
+
+  &.in_progress {
+    background: var(--color-info-10);
+    color: var(--color-info-700);
+  }
+
+  &.pending {
+    background: var(--color-warning-10);
+    color: var(--color-warning-700);
+  }
+
+  &.cancelled {
+    background: var(--color-error-10);
+    color: var(--color-error-700);
+  }
+}
+
+.todo-item-body {
+  min-width: 0;
+}
+
+.todo-item-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--gray-800);
+  word-break: break-word;
+}
+
 .hide-text {
   display: none;
 }
@@ -2282,12 +2509,12 @@ watch(currentChatId, (threadId, oldThreadId) => {
 
 /* AgentState 按钮有内容时的样式 */
 .agent-nav-btn.agent-state-btn.has-content:hover:not(.is-disabled) {
-  color: var(--main-700);
-  background-color: var(--main-20);
+  color: var(--gray-900);
+  background-color: var(--gray-100);
 }
 
 .agent-nav-btn.agent-state-btn.active {
-  color: var(--main-700);
-  background-color: var(--main-20);
+  color: var(--gray-900);
+  background-color: var(--gray-100);
 }
 </style>

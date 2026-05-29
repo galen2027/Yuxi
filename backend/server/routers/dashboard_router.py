@@ -12,11 +12,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import Integer, String, cast, distinct, func, or_, select, text
+from sqlalchemy import Integer, String, cast, distinct, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.routers.auth_router import get_admin_user
-from server.utils.auth_middleware import get_db
+from server.utils.auth_middleware import get_admin_user, get_db
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import UTC, ensure_shanghai, shanghai_now, utc_now
@@ -660,16 +659,11 @@ async def get_all_feedbacks(
     from yuxi.storage.postgres.models_business import Conversation, Message, MessageFeedback, User
 
     try:
-        # Build query with joins including User table
-        # Try both User.id and User.uid as MessageFeedback.uid might be stored as either
         query = (
             select(MessageFeedback, Message, Conversation, User)
             .join(Message, MessageFeedback.message_id == Message.id)
             .join(Conversation, Message.conversation_id == Conversation.id)
-            .outerjoin(
-                User,
-                (MessageFeedback.uid == User.uid) | (MessageFeedback.uid == User.uid),
-            )
+            .outerjoin(User, MessageFeedback.uid == User.uid)
         )
 
         # Apply filters

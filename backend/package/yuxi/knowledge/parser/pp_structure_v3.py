@@ -12,7 +12,7 @@ from typing import Any
 
 import requests
 
-from yuxi.plugins.parser.base import BaseDocumentProcessor, DocumentParserException
+from yuxi.knowledge.parser.base import BaseDocumentProcessor, DocumentParserException
 from yuxi.utils import logger
 
 

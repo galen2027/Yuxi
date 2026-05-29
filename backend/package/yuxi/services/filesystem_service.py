@@ -58,7 +58,7 @@ async def _resolve_filesystem_state(
     runtime_context.uid = str(user.uid)
     await prepare_agent_runtime_context(runtime_context)
 
-    return conversation, runtime_context
+    return runtime_context
 
 
 async def list_filesystem_entries_view(
@@ -73,7 +73,7 @@ async def list_filesystem_entries_view(
 
     normalized_path = (path or "/").strip() or "/"
 
-    _conversation, runtime_context = await _resolve_filesystem_state(
+    runtime_context = await _resolve_filesystem_state(
         thread_id=thread_id,
         user=current_user,
         db=db,
@@ -105,7 +105,7 @@ async def read_file_content_view(
 
     normalized_path = path.strip()
 
-    _conversation, runtime_context = await _resolve_filesystem_state(
+    runtime_context = await _resolve_filesystem_state(
         thread_id=thread_id,
         user=current_user,
         db=db,

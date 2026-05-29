@@ -19,9 +19,9 @@ from server.utils.auth_middleware import (
     get_db,
     get_required_user,
 )
-from server.utils.auth_utils import AuthUtils
-from server.utils.user_utils import generate_unique_uid, validate_username, is_valid_phone_number
-from server.utils.common_utils import log_operation
+from yuxi.utils.auth_utils import AuthUtils
+from yuxi.services.user_identity_service import generate_unique_uid, validate_username, is_valid_phone_number
+from yuxi.services.operation_log_service import log_operation
 from yuxi.services.upload_utils import upload_image_to_minio
 from yuxi.utils.datetime_utils import utc_now_naive
 
@@ -136,13 +136,6 @@ class OIDCLoginResponse(BaseModel):
 # =============================================================================
 # === 工具函数 ===
 # =============================================================================
-
-
-async def get_default_department_id(db: AsyncSession) -> int | None:
-    """获取默认部门的ID"""
-    result = await db.execute(select(Department).filter(Department.name == "默认部门"))
-    default_dept = result.scalar_one_or_none()
-    return default_dept.id if default_dept else None
 
 
 # 路由：登录获取令牌
@@ -589,18 +582,6 @@ async def read_user(user_id: int, current_user: User = Depends(get_admin_user), 
     return user.to_dict()
 
 
-async def check_department_admin_count(db: AsyncSession, department_id: int, exclude_user_id: int) -> int:
-    """检查部门中管理员数量（排除指定用户）"""
-    result = await db.execute(
-        select(func.count(User.id)).filter(
-            User.department_id == department_id,
-            User.role == "admin",
-            User.id != exclude_user_id,
-        )
-    )
-    return result.scalar()
-
-
 # 路由：更新用户信息（管理员权限）
 @auth.put("/users/{user_id}", response_model=UserResponse)
 async def update_user(
@@ -668,7 +649,9 @@ async def update_user(
     if user_data.role is not None:
         # 检查是否将管理员降级为普通用户
         if user.role == "admin" and user_data.role == "user" and user.department_id is not None:
-            admin_count = await check_department_admin_count(db, user.department_id, user_id)
+            admin_count = await UserRepository().get_admin_count_in_department(
+                user.department_id, exclude_user_id=user_id
+            )
             if admin_count <= 1:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -695,7 +678,9 @@ async def update_user(
 
         # 检查该用户是否是当前部门的唯一管理员
         if user.role == "admin" and user.department_id is not None:
-            admin_count = await check_department_admin_count(db, user.department_id, user_id)
+            admin_count = await UserRepository().get_admin_count_in_department(
+                user.department_id, exclude_user_id=user_id
+            )
             if admin_count <= 1:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,

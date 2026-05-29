@@ -18,7 +18,7 @@ from docling.document_converter import DocumentConverter
 from langchain_community.document_loaders import PyPDFLoader
 from markdownify import markdownify as md_convert
 
-from yuxi.plugins.parser.zip_utils import process_zip_file as _process_zip_file
+from yuxi.knowledge.parser.zip_utils import process_zip_file as _process_zip_file
 from yuxi.storage.minio import get_minio_client
 from yuxi.utils import logger
 
@@ -212,8 +212,8 @@ def pdfreader(file_path, params=None):
 
 def parse_pdf(file, params=None):
     """解析 PDF 文件，支持多种 OCR 方式。"""
-    from yuxi.plugins.parser.base import DocumentProcessorException
-    from yuxi.plugins.parser.factory import DocumentProcessorFactory
+    from yuxi.knowledge.parser.base import DocumentProcessorException
+    from yuxi.knowledge.parser.factory import DocumentProcessorFactory
 
     opt_ocr, processor_params = _resolve_ocr_engine_params(params)
 
@@ -236,8 +236,8 @@ def parse_pdf(file, params=None):
 
 def parse_image(file, params=None):
     """解析图像文件，支持多种 OCR 方式。"""
-    from yuxi.plugins.parser.base import DocumentProcessorException
-    from yuxi.plugins.parser.factory import DocumentProcessorFactory
+    from yuxi.knowledge.parser.base import DocumentProcessorException
+    from yuxi.knowledge.parser.factory import DocumentProcessorFactory
 
     opt_ocr, processor_params = _resolve_ocr_engine_params(params)
 

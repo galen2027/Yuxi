@@ -22,8 +22,8 @@ from yuxi.storage.postgres.models_business import Department, User
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.logging_config import logger
 
-from server.utils.auth_utils import AuthUtils
-from server.utils.common_utils import log_operation
+from yuxi.utils.auth_utils import AuthUtils
+from yuxi.services.operation_log_service import log_operation
 
 # 前端 OIDC 回调路由路径（与 web/src/router/index.js 中的路由保持一致）
 FRONTEND_CALLBACK_PATH = "/auth/oidc/callback"
@@ -563,8 +563,6 @@ async def _create_oidc_binding_placeholder(db, sub: str, target_user: User) -> N
     password_hash = AuthUtils.hash_password(random_password)
 
     # username 使用 oidc-binding-{sub_hash} 避免冲突，sub_hash 基于完整 sub 生成
-    import hashlib
-
     sub_hash = hashlib.sha256(sub.encode()).hexdigest()[:8]
     username = f"oidc-binding-{sub_hash}"
 

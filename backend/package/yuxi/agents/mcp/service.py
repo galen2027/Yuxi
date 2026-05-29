@@ -11,12 +11,11 @@ import asyncio
 import hashlib
 import json
 import re
-import traceback
 from collections.abc import Callable
 from typing import Any, cast
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.storage.postgres.models_business import MCPServer
 from yuxi.utils import logger
@@ -75,52 +74,18 @@ _SYNCED_MCP_FIELDS = (
 
 
 async def ensure_builtin_mcp_servers_in_db() -> None:
-    """Ensure built-in MCP server definitions exist in the database.
-
-    This function only synchronizes code-defined built-ins to the database.
-    It does not preload runtime configuration into memory.
-    """
-    # Delayed import to avoid circular references
+    """Ensure built-in MCP server definitions exist in the database."""
     from yuxi.storage.postgres.manager import pg_manager
 
     try:
         async with pg_manager.get_async_session_context() as session:
-            # Check if database has MCP configurations
-            result = await session.execute(select(func.count(MCPServer.slug)))
-            count = result.scalar()
-
-            if count == 0:
-                # Database is empty, import default configurations
-                logger.info("No MCP servers in database, importing default configurations...")
-                for slug, config in _DEFAULT_MCP_SERVERS.items():
-                    server = MCPServer(
-                        slug=slug,
-                        name=config.get("name", slug),
-                        description=config.get("description"),
-                        transport=config["transport"],
-                        url=config.get("url"),
-                        command=config.get("command"),
-                        args=config.get("args"),
-                        env=config.get("env"),
-                        headers=config.get("headers"),
-                        timeout=config.get("timeout"),
-                        sse_read_timeout=config.get("sse_read_timeout"),
-                        tags=config.get("tags"),
-                        icon=config.get("icon"),
-                        enabled=0,
-                        created_by="system",
-                        updated_by="system",
-                    )
-                    session.add(server)
-                await session.commit()
-                logger.info(f"Imported {len(_DEFAULT_MCP_SERVERS)} default MCP servers to database")
-            else:
-                # Ensure all built-in MCP servers exist in database
-                for slug, config in _DEFAULT_MCP_SERVERS.items():
-                    result = await session.execute(select(MCPServer).filter(MCPServer.slug == slug))
-                    existing = result.scalar_one_or_none()
-                    if not existing:
-                        server = MCPServer(
+            any_changed = False
+            for slug, config in _DEFAULT_MCP_SERVERS.items():
+                result = await session.execute(select(MCPServer).filter(MCPServer.slug == slug))
+                existing = result.scalar_one_or_none()
+                if not existing:
+                    session.add(
+                        MCPServer(
                             slug=slug,
                             name=config.get("name", slug),
                             description=config.get("description"),
@@ -138,25 +103,26 @@ async def ensure_builtin_mcp_servers_in_db() -> None:
                             created_by="system",
                             updated_by="system",
                         )
-                        session.add(server)
-                        logger.info(f"Added built-in MCP server '{slug}' to database")
-                    else:
-                        changed = False
-                        for field in _SYNCED_MCP_FIELDS:
-                            next_value = config.get(field)
-                            if getattr(existing, field) != next_value:
-                                setattr(existing, field, next_value)
-                                changed = True
-                        if changed:
-                            existing.updated_by = "system"
-                # Commit if any new servers were added (check session state)
-                if session.new:
-                    await session.commit()
-                elif session.dirty:
-                    await session.commit()
+                    )
+                    any_changed = True
+                    logger.info(f"Added built-in MCP server '{slug}' to database")
+                    continue
+
+                server_changed = False
+                for field in _SYNCED_MCP_FIELDS:
+                    next_value = config.get(field)
+                    if getattr(existing, field) != next_value:
+                        setattr(existing, field, next_value)
+                        server_changed = True
+                if server_changed:
+                    existing.updated_by = "system"
+                    any_changed = True
+
+            if any_changed:
+                await session.commit()
 
     except Exception as e:
-        logger.error(f"Failed to ensure builtin MCP servers in database: {e}, traceback: {traceback.format_exc()}")
+        logger.exception(f"Failed to ensure builtin MCP servers in database: {e}")
 
 
 async def get_mcp_client(
@@ -310,9 +276,7 @@ async def get_mcp_tools(
                 )
 
         except Exception as e:
-            logger.error(
-                f"Failed to load tools from MCP server '{server_slug}': {e}, traceback: {traceback.format_exc()}"
-            )
+            logger.exception(f"Failed to load tools from MCP server '{server_slug}': {e}")
             return []
 
     # 3. Filtering (Apply to Return Value Only)
@@ -365,7 +329,7 @@ def get_mcp_tools_stats(server_slug: str) -> dict[str, int] | None:
 
 
 # =============================================================================
-# === Server Config CRUD (Existing in mcp_service.py) ===
+# === Server Config CRUD ===
 # =============================================================================
 
 

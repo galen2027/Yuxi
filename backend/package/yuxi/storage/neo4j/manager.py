@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 import re
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from neo4j import GraphDatabase as GD
 

@@ -95,7 +95,7 @@ def get_tool_instances_by_category(category: str) -> list[Any]:
 
 
 async def resolve_configured_runtime_tools(context) -> list[Any]:
-    from yuxi.services.mcp_service import get_enabled_mcp_tools
+    from yuxi.agents.mcp.service import get_enabled_mcp_tools
 
     selected_tools = []
     selected_tool_names: set[str] = set()

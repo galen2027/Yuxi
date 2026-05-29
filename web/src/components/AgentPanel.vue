@@ -1,7 +1,7 @@
 <template>
   <div class="agent-panel" :class="{ resizing: isResizing }">
     <div class="resize-handle" @pointerdown="startResize"></div>
-    <div class="panel-header">
+    <div class="panel-header side-panel__header">
       <div class="panel-title">
         <div v-if="hasActivePreview && normalizedPreviewTabs.length" class="preview-tabs-bar">
           <div
@@ -760,6 +760,7 @@ watch(
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding: 0 6px;
 }
 
 .files-display.has-preview.with-tree .tree-pane {
@@ -767,7 +768,6 @@ watch(
   min-width: 260px;
   max-width: 380px;
   border-left: 1px solid var(--gray-100);
-  padding-left: 8px;
 }
 
 .preview-tabs-bar {

@@ -7,11 +7,15 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.routers.auth_router import get_admin_user
-from server.utils.auth_middleware import get_db, get_required_user
+from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.context import filter_config_by_role
-from yuxi.repositories.agent_repository import AgentRepository, is_builtin_agent, user_can_access_agent, user_can_manage_agent
+from yuxi.repositories.agent_repository import (
+    AgentRepository,
+    is_builtin_agent,
+    user_can_access_agent,
+    user_can_manage_agent,
+)
 from yuxi.services.agent_run_service import (
     cancel_agent_run_view,
     create_agent_run_view,
@@ -19,9 +23,7 @@ from yuxi.services.agent_run_service import (
     get_agent_run_view,
     stream_agent_run_events,
 )
-from yuxi.services.chat_service import agent_chat, stream_agent_chat
 from yuxi.storage.postgres.models_business import User
-from yuxi.utils.logging_config import logger
 
 agent_router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -56,14 +58,6 @@ class AgentRunCreate(BaseModel):
     resume: Any | None = Field(None, description="可选，恢复 interrupted run 的输入")
     parent_run_id: str | None = Field(None, description="可选，被恢复的 run ID")
     resume_request_id: str | None = Field(None, description="可选，resume 幂等键")
-
-
-class AgentChatRequest(BaseModel):
-    query: str = Field(..., description="用户输入的问题")
-    agent_id: str = Field(..., description="智能体 ID")
-    thread_id: str | None = Field(None, description="可选，会话线程 ID；不传则自动创建")
-    meta: dict = Field(default_factory=dict, description="可选，请求追踪信息，例如 request_id")
-    image_content: str | None = Field(None, description="可选，base64 图片内容")
 
 
 def _backend_info(info: dict) -> dict:
@@ -121,9 +115,7 @@ async def list_agents(current_user: User = Depends(get_required_user), db: Async
     await repo.ensure_default_agent()
     items = await repo.list_visible(user=current_user)
     backend_info_cache: dict[tuple[str, bool, str], dict] = {}
-    agents = [
-        await _serialize_agent(repo, item, current_user, backend_info_cache=backend_info_cache) for item in items
-    ]
+    agents = [await _serialize_agent(repo, item, current_user, backend_info_cache=backend_info_cache) for item in items]
     return {"agents": agents}
 
 
@@ -189,7 +181,7 @@ async def update_agent(
         raise HTTPException(status_code=403, detail="不能编辑非自己创建的智能体")
 
     try:
-        fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
+        fields_set = payload.model_fields_set
         if "description" in fields_set and payload.description is None:
             item.description = None
         if "icon" in fields_set and payload.icon is None:
@@ -244,44 +236,6 @@ async def set_agent_default(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"agent": await _serialize_agent(repo, updated, current_user, include_configurable_items=True)}
-
-
-@agent_router.post("/chat")
-async def chat_agent(
-    payload: AgentChatRequest,
-    current_user: User = Depends(get_required_user),
-    db: AsyncSession = Depends(get_db),
-):
-    logger.info(f"query: {payload.query}, agent_id: {payload.agent_id}, meta: {payload.meta}")
-    return StreamingResponse(
-        stream_agent_chat(
-            query=payload.query,
-            agent_id=payload.agent_id,
-            thread_id=payload.thread_id,
-            meta=dict(payload.meta or {}),
-            image_content=payload.image_content,
-            current_user=current_user,
-            db=db,
-        ),
-        media_type="application/json",
-    )
-
-
-@agent_router.post("/chat/sync")
-async def chat_agent_sync(
-    payload: AgentChatRequest,
-    current_user: User = Depends(get_required_user),
-    db: AsyncSession = Depends(get_db),
-):
-    return await agent_chat(
-        query=payload.query,
-        agent_id=payload.agent_id,
-        thread_id=payload.thread_id,
-        meta=dict(payload.meta or {}),
-        image_content=payload.image_content,
-        current_user=current_user,
-        db=db,
-    )
 
 
 @agent_router.post("/runs")

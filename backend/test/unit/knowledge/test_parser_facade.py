@@ -7,12 +7,12 @@ from types import SimpleNamespace
 
 import fitz
 import pytest
-import yuxi.plugins.parser.unified as parser_unified
+import yuxi.knowledge.parser.unified as parser_unified
 from docx import Document
 from PIL import Image
 
-from yuxi.plugins.parser import Parser
-from yuxi.plugins.parser.factory import DocumentProcessorFactory
+from yuxi.knowledge.parser import Parser
+from yuxi.knowledge.parser.factory import DocumentProcessorFactory
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 

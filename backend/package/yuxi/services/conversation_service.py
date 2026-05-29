@@ -12,7 +12,7 @@ from yuxi.agents.backends.sandbox import (
 )
 from yuxi.agents.buildin import agent_manager
 from yuxi.config import config as app_config
-from yuxi.plugins.parser import Parser
+from yuxi.knowledge.parser import Parser
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.services.mention_search_service import invalidate_mention_cache
@@ -191,12 +191,6 @@ def _parse_user_tmp_object(object_name: str, uid: str) -> tuple[str, str, str]:
         raise HTTPException(status_code=400, detail="无效的临时附件路径")
 
     return parts[0], parts[1], parts[2]
-
-
-def _require_user_tmp_object(object_name: str, uid: str) -> str:
-    """校验 tmp 对象属于当前用户并返回 tmp_file_id。"""
-    tmp_file_id, _, _ = _parse_user_tmp_object(object_name, uid)
-    return tmp_file_id
 
 
 def _require_tmp_object_section(

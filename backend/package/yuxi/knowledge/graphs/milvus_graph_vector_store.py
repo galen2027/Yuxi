@@ -20,7 +20,7 @@ from pymilvus import (
 from yuxi.knowledge.graphs.graph_utils import graph_entity_collection_name, graph_triple_collection_name
 from yuxi.knowledge.implementations.milvus import CONTENT_ANALYZER_PARAMS, CONTENT_SPARSE_FIELD, VECTOR_METRIC_TYPE
 from yuxi.models.embed import select_embedding_model
-from yuxi.services.model_cache import model_cache
+from yuxi.models.providers.cache import model_cache
 from yuxi.utils import hashstr, logger
 
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.repositories.subagent_repository import SubAgentRepository
+from yuxi.agents.subagents.repository import SubAgentRepository
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import SubAgent
 from yuxi.utils import logger

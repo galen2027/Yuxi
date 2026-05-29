@@ -13,8 +13,8 @@ from yuxi.agents.middlewares import (
 )
 from yuxi.agents.middlewares.knowledge_base_middleware import KnowledgeBaseMiddleware
 from yuxi.agents.middlewares.skills_middleware import SkillsMiddleware
-from yuxi.services.subagent_service import get_subagents_from_slugs
-from yuxi.services.tool_service import resolve_configured_runtime_tools
+from yuxi.agents.subagents.service import get_subagents_from_slugs
+from yuxi.agents.toolkits.service import resolve_configured_runtime_tools
 
 from .prompt import TODO_MID_PROMPT, build_prompt_with_context
 

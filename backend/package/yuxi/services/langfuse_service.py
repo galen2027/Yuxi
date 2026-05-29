@@ -43,9 +43,6 @@ def get_langfuse_client() -> Langfuse | None:
     if not is_langfuse_enabled():
         return None
 
-    if Langfuse is None:
-        return None
-
     kwargs: dict[str, Any] = {
         "public_key": os.getenv("LANGFUSE_PUBLIC_KEY"),
         "secret_key": os.getenv("LANGFUSE_SECRET_KEY"),

@@ -435,7 +435,7 @@ const getStatusText = (status) => {
 }
 
 const files = computed(() => Object.values(store.database.files || {}))
-const refreshing = computed(() => store.state.refrashing)
+const refreshing = computed(() => store.state.databaseLoading)
 const lock = computed(() => store.state.lock)
 const batchDeleting = computed(() => store.state.batchDeleting)
 const batchParsing = computed(() => store.state.chunkLoading)

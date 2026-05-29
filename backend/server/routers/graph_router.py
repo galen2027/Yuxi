@@ -1,5 +1,3 @@
-import traceback
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from server.utils.auth_middleware import get_admin_user
@@ -45,8 +43,7 @@ async def get_graphs(current_user: User = Depends(get_admin_user)):
             )
         return {"success": True, "data": graphs}
     except Exception as e:
-        logger.error(f"Failed to list graphs: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.exception(f"Failed to list graphs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list graphs: {str(e)}")
 
 
@@ -64,14 +61,16 @@ async def get_subgraph(
         logger.info(f"Querying subgraph - kb_id: {kb_id}, label: {node_label}")
         service = await _get_graph_service(kb_id)
         result_data = await service.query_nodes(
-            keyword=node_label, max_depth=max_depth, max_nodes=max_nodes, exclude_chunk=exclude_chunk,
+            keyword=node_label,
+            max_depth=max_depth,
+            max_nodes=max_nodes,
+            exclude_chunk=exclude_chunk,
         )
         return {"success": True, "data": result_data}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get subgraph: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.exception(f"Failed to get subgraph: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get subgraph: {str(e)}")
 
 

@@ -7,8 +7,8 @@ from typing import Any
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.config.builtin_providers import BUILTIN_PROVIDERS
-from yuxi.repositories.model_provider_repository import (
+from yuxi.models.providers.builtin import BUILTIN_PROVIDERS
+from yuxi.models.providers.repository import (
     create_model_provider,
     delete_model_provider,
     get_model_provider,
@@ -90,6 +90,24 @@ def _validate_models_capabilities(enabled_models: list[dict], capabilities: set[
             raise ValueError(f"模型 {model['id']} 的 type={model['type']} 不在 provider 能力 {sorted(capabilities)} 内")
 
 
+_FIELD_DEFAULTS: dict[str, Any] = {
+    "capabilities": [],
+    "enabled_models": [],
+    "headers_json": {},
+    "extra_json": {},
+    "is_enabled": True,
+    "is_builtin": False,
+}
+_FIELD_NORMALIZERS = {
+    "capabilities": _normalize_list,
+    "enabled_models": _normalize_model_list,
+    "headers_json": _normalize_dict,
+    "extra_json": _normalize_dict,
+    "is_enabled": bool,
+    "is_builtin": bool,
+}
+
+
 def _normalize_payload(data: dict[str, Any], *, partial: bool = False) -> dict[str, Any]:
     payload = dict(data)
     if not partial or "provider_id" in payload:
@@ -125,23 +143,7 @@ def _normalize_payload(data: dict[str, Any], *, partial: bool = False) -> dict[s
         if provider_type not in VALID_PROVIDER_TYPES:
             raise ValueError(f"provider_type 必须是 {', '.join(sorted(VALID_PROVIDER_TYPES))} 之一")
 
-    # 声明式字段默认值：partial 模式下仅规范化传入值，非 partial 补全默认值
-    _FIELD_DEFAULTS: dict[str, Any] = {
-        "capabilities": [],
-        "enabled_models": [],
-        "headers_json": {},
-        "extra_json": {},
-        "is_enabled": True,
-        "is_builtin": False,
-    }
-    _FIELD_NORMALIZERS = {
-        "capabilities": _normalize_list,
-        "enabled_models": _normalize_model_list,
-        "headers_json": _normalize_dict,
-        "extra_json": _normalize_dict,
-        "is_enabled": bool,
-        "is_builtin": bool,
-    }
+    # partial 模式下仅规范化传入值，非 partial 补全默认值
     for field, default in _FIELD_DEFAULTS.items():
         if field in payload:
             normalizer = _FIELD_NORMALIZERS.get(field)
@@ -368,7 +370,7 @@ async def fetch_remote_models(provider: ModelProvider) -> list[dict[str, Any]]:
 
 async def test_model_status_by_spec(spec: str) -> dict:
     """根据 spec 测试模型连接状态。"""
-    from yuxi.services.model_cache import model_cache
+    from yuxi.models.providers.cache import model_cache
 
     info = model_cache.get_model_info(spec)
     if not info:

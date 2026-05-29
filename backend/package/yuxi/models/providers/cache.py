@@ -149,7 +149,7 @@ class ModelCache:
         return grouped
 
     def rebuild(self, providers: list[Any]) -> None:
-        from yuxi.services.model_provider_service import resolve_api_key
+        from yuxi.models.providers.service import resolve_api_key
 
         new_cache: dict[str, ModelInfo] = {}
 

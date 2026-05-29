@@ -13,20 +13,20 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
 async def test_chat_endpoints_require_authentication(test_client):
-    assert (await test_client.get("/api/chat/default_agent")).status_code == 401
-    assert (await test_client.get("/api/chat/agent")).status_code == 401
+    assert (await test_client.get("/api/chat/threads")).status_code == 401
+    assert (await test_client.get("/api/agent")).status_code == 401
 
 
 async def _create_thread_for_user(test_client, headers: dict[str, str]) -> str:
-    agents_resp = await test_client.get("/api/chat/agent", headers=headers)
+    agents_resp = await test_client.get("/api/agent", headers=headers)
     assert agents_resp.status_code == 200, agents_resp.text
     agents = agents_resp.json().get("agents", [])
     if not agents:
         pytest.skip("No agents available for chat router integration tests.")
 
-    agent_id = agents[0].get("id")
+    agent_id = agents[0].get("agent_id") or agents[0].get("slug")
     if not agent_id:
-        pytest.skip("Agent payload missing id field.")
+        pytest.skip("Agent payload missing slug field.")
 
     create_resp = await test_client.post(
         "/api/chat/thread",
@@ -45,120 +45,74 @@ async def _create_thread_for_user(test_client, headers: dict[str, str]) -> str:
 
 
 async def test_admin_can_list_agents(test_client, admin_headers):
-    response = await test_client.get("/api/chat/agent", headers=admin_headers)
+    response = await test_client.get("/api/agent", headers=admin_headers)
     assert response.status_code == 200, response.text
     payload = response.json()
     assert isinstance(payload["agents"], list)
     if payload["agents"]:
-        assert "id" in payload["agents"][0]
+        assert "agent_id" in payload["agents"][0]
 
 
 async def test_admin_can_read_default_agent(test_client, admin_headers):
-    response = await test_client.get("/api/chat/default_agent", headers=admin_headers)
+    response = await test_client.get("/api/agent/default", headers=admin_headers)
     assert response.status_code == 200, response.text
-    assert "default_agent_id" in response.json()
+    agent = response.json()["agent"]
+    assert agent["is_default"] is True
+    assert agent["agent_id"]
 
 
-async def test_standard_user_manages_own_agent_config_with_role_filtered_fields(
+async def test_agent_detail_filters_configurable_items_by_role(
     test_client,
     admin_headers,
     standard_user,
 ):
-    agents_response = await test_client.get("/api/chat/agent", headers=standard_user["headers"])
+    agents_response = await test_client.get("/api/agent", headers=standard_user["headers"])
     assert agents_response.status_code == 200, agents_response.text
     agents = agents_response.json().get("agents", [])
     if not agents:
         pytest.skip("No agents are registered in the system.")
 
-    agent_id = agents[0]["id"]
+    agent_id = agents[0].get("agent_id") or agents[0].get("slug")
+    if not agent_id:
+        pytest.skip("Agent payload missing slug field.")
 
-    user_agent_response = await test_client.get(f"/api/chat/agent/{agent_id}", headers=standard_user["headers"])
+    user_agent_response = await test_client.get(f"/api/agent/{agent_id}", headers=standard_user["headers"])
     assert user_agent_response.status_code == 200, user_agent_response.text
-    user_items = user_agent_response.json().get("configurable_items", {})
+    user_items = user_agent_response.json()["agent"].get("configurable_items", {})
     assert "summary_threshold" not in user_items
 
-    admin_agent_response = await test_client.get(f"/api/chat/agent/{agent_id}", headers=admin_headers)
+    admin_agent_response = await test_client.get(f"/api/agent/{agent_id}", headers=admin_headers)
     assert admin_agent_response.status_code == 200, admin_agent_response.text
-    admin_items = admin_agent_response.json().get("configurable_items", {})
+    admin_items = admin_agent_response.json()["agent"].get("configurable_items", {})
     assert "summary_threshold" in admin_items
-
-    config_name = f"pytest-config-{uuid.uuid4().hex[:8]}"
-    create_response = await test_client.post(
-        f"/api/chat/agent/{agent_id}/configs",
-        json={
-            "name": config_name,
-            "config_json": {"context": {"system_prompt": "user visible", "summary_threshold": 1}},
-            "set_default": True,
-        },
-        headers=standard_user["headers"],
-    )
-    assert create_response.status_code == 200, create_response.text
-    created = create_response.json()["config"]
-    config_id = created["id"]
-    assert created["uid"] == standard_user["user"]["uid"]
-    assert created["is_default"] is True
-    assert created["config_json"]["context"]["system_prompt"] == "user visible"
-    assert "summary_threshold" not in created["config_json"]["context"]
-
-    try:
-        admin_list_response = await test_client.get(f"/api/chat/agent/{agent_id}/configs", headers=admin_headers)
-        assert admin_list_response.status_code == 200, admin_list_response.text
-        admin_config_ids = {item["id"] for item in admin_list_response.json().get("configs", [])}
-        assert config_id not in admin_config_ids
-
-        update_response = await test_client.put(
-            f"/api/chat/agent/{agent_id}/configs/{config_id}",
-            json={"config_json": {"context": {"system_prompt": "updated", "summary_threshold": 2}}},
-            headers=standard_user["headers"],
-        )
-        assert update_response.status_code == 200, update_response.text
-        updated_context = update_response.json()["config"]["config_json"]["context"]
-        assert updated_context == {"system_prompt": "updated"}
-
-        default_response = await test_client.post(
-            f"/api/chat/agent/{agent_id}/configs/{config_id}/set_default",
-            json={},
-            headers=standard_user["headers"],
-        )
-        assert default_response.status_code == 200, default_response.text
-        assert default_response.json()["config"]["is_default"] is True
-    finally:
-        delete_response = await test_client.delete(
-            f"/api/chat/agent/{agent_id}/configs/{config_id}",
-            headers=standard_user["headers"],
-        )
-        assert delete_response.status_code in (200, 404), delete_response.text
 
 
 async def test_setting_default_agent_requires_admin(test_client, admin_headers, standard_user):
-    # Attempt as admin first to obtain a candidate agent id.
-    agents_response = await test_client.get("/api/chat/agent", headers=admin_headers)
+    agents_response = await test_client.get("/api/agent", headers=admin_headers)
     assert agents_response.status_code == 200, agents_response.text
     agents = agents_response.json().get("agents", [])
 
     if not agents:
         pytest.skip("No agents are registered in the system.")
 
-    candidate_agent_id = agents[0].get("id")
+    candidate_agent_id = agents[0].get("agent_id") or agents[0].get("slug")
     if not candidate_agent_id:
-        pytest.skip("Agent payload missing id field.")
+        pytest.skip("Agent payload missing slug field.")
 
-    # Normal user should not be able to update the default agent.
     forbidden_response = await test_client.post(
-        "/api/chat/set_default_agent",
-        json={"agent_id": candidate_agent_id},
+        f"/api/agent/{candidate_agent_id}/set_default",
         headers=standard_user["headers"],
     )
     assert forbidden_response.status_code == 403
 
-    # Admin should succeed.
     update_response = await test_client.post(
-        "/api/chat/set_default_agent",
-        json={"agent_id": candidate_agent_id},
+        f"/api/agent/{candidate_agent_id}/set_default",
         headers=admin_headers,
     )
     assert update_response.status_code == 200, update_response.text
-    assert update_response.json()["default_agent_id"] == candidate_agent_id
+    agent = update_response.json()["agent"]
+    assert agent["agent_id"] == candidate_agent_id
+    assert agent["is_default"] is True
 
 
 async def test_save_thread_artifact_to_workspace_copies_output_file(test_client, standard_user):

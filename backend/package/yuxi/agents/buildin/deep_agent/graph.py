@@ -19,8 +19,8 @@ from yuxi.agents.middlewares import (
 from yuxi.agents.middlewares.knowledge_base_middleware import KnowledgeBaseMiddleware
 from yuxi.agents.middlewares.skills_middleware import SkillsMiddleware
 from yuxi.agents.toolkits.buildin.tools import _create_tavily_search
-from yuxi.services.subagent_service import get_subagents_from_slugs
-from yuxi.services.tool_service import resolve_configured_runtime_tools
+from yuxi.agents.subagents.service import get_subagents_from_slugs
+from yuxi.agents.toolkits.service import resolve_configured_runtime_tools
 from yuxi.utils import logger
 from yuxi.utils.datetime_utils import shanghai_now
 

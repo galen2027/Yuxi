@@ -1,5 +1,7 @@
 """MCP 服务器数据访问层 - Repository"""
 
+from __future__ import annotations
+
 from typing import Any
 
 from sqlalchemy import select

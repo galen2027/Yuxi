@@ -10,7 +10,7 @@ import pytest
 from yuxi.models.chat import OpenAIBase
 from yuxi.models.embed import OtherEmbedding
 from yuxi.models.rerank import DashscopeReranker, OpenAIReranker
-from yuxi.services.model_provider_service import (
+from yuxi.models.providers.service import (
     resolve_api_key,
     ensure_builtin_model_providers_in_db,
     get_model_provider_by_id,

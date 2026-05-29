@@ -341,7 +341,7 @@ async def test_install_skill_git_with_skill_names_passes_admin_check(mock_pg):
         with patch("yuxi.services.remote_skill_install_service.prepare_remote_skills_batch") as mock_prepare:
             mock_prepare.return_value = preparation
 
-            with patch("yuxi.services.skill_service.import_skill_dir") as mock_import:
+            with patch("yuxi.agents.skills.service.import_skill_dir") as mock_import:
                 mock_import.return_value = SimpleNamespace(slug="test-skill")
 
                 with patch(
@@ -350,7 +350,7 @@ async def test_install_skill_git_with_skill_names_passes_admin_check(mock_pg):
                     # Mock enabling skill in config
                     mock_enable.return_value = True
 
-                    with patch("yuxi.services.skill_service.sync_thread_readable_skills"):
+                    with patch("yuxi.agents.skills.service.sync_thread_readable_skills"):
                         result = await _install_skill_func(
                             source="owner/repo",
                             skill_names=["test-skill"],
@@ -379,7 +379,7 @@ async def test_install_skill_sandbox_success(mock_pg):
         with patch("yuxi.agents.toolkits.buildin.install_skill._prepare_skill_from_sandbox") as mock_prepare:
             mock_prepare.return_value = (Path("/tmp/my-skill"), "my-skill")
 
-            with patch("yuxi.services.skill_service.import_skill_dir") as mock_import:
+            with patch("yuxi.agents.skills.service.import_skill_dir") as mock_import:
                 mock_import.return_value = SimpleNamespace(slug="my-skill")
 
                 with patch(
@@ -387,7 +387,7 @@ async def test_install_skill_sandbox_success(mock_pg):
                 ) as mock_enable:
                     mock_enable.return_value = True
 
-                    with patch("yuxi.services.skill_service.sync_thread_readable_skills"):
+                    with patch("yuxi.agents.skills.service.sync_thread_readable_skills"):
                         result = await _install_skill_func(
                             source="/home/gem/user-data/workspace/my-skill",
                             runtime=runtime,
@@ -467,7 +467,7 @@ async def test_install_skill_partial_config_failure(mock_pg):
         with patch("yuxi.agents.toolkits.buildin.install_skill._prepare_skill_from_sandbox") as mock_prepare:
             mock_prepare.return_value = (Path("/tmp/my-skill"), "my-skill")
 
-            with patch("yuxi.services.skill_service.import_skill_dir") as mock_import:
+            with patch("yuxi.agents.skills.service.import_skill_dir") as mock_import:
                 mock_import.return_value = SimpleNamespace(slug="my-skill")
 
                 with patch(
@@ -476,7 +476,7 @@ async def test_install_skill_partial_config_failure(mock_pg):
                     # Simulate config persistence failure
                     mock_enable.return_value = False
 
-                    with patch("yuxi.services.skill_service.sync_thread_readable_skills"):
+                    with patch("yuxi.agents.skills.service.sync_thread_readable_skills"):
                         result = await _install_skill_func(
                             source="/home/gem/user-data/workspace/my-skill",
                             runtime=runtime,
@@ -506,7 +506,7 @@ async def test_install_skill_slug_warning_for_renamed(mock_pg):
             # Simulate skill being renamed during installation
             mock_prepare.return_value = (Path("/tmp/my-skill"), "my-skill")
 
-            with patch("yuxi.services.skill_service.import_skill_dir") as mock_import:
+            with patch("yuxi.agents.skills.service.import_skill_dir") as mock_import:
                 mock_import.return_value = SimpleNamespace(slug="my-skill-v2")
 
                 with patch(
@@ -514,7 +514,7 @@ async def test_install_skill_slug_warning_for_renamed(mock_pg):
                 ) as mock_enable:
                     mock_enable.return_value = True
 
-                    with patch("yuxi.services.skill_service.sync_thread_readable_skills"):
+                    with patch("yuxi.agents.skills.service.sync_thread_readable_skills"):
                         result = await _install_skill_func(
                             source="/home/gem/user-data/workspace/my-skill",
                             runtime=runtime,

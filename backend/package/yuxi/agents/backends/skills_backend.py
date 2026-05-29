@@ -6,7 +6,7 @@ from typing import Any
 from deepagents.backends import FilesystemBackend
 from deepagents.backends.protocol import EditResult, FileDownloadResponse, FileInfo, FileUploadResponse, WriteResult
 
-from yuxi.services.skill_service import get_skills_root_dir, is_valid_skill_slug
+from yuxi.agents.skills.service import get_skills_root_dir, is_valid_skill_slug
 
 
 class SelectedSkillsReadonlyBackend(FilesystemBackend):

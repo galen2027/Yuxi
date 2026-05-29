@@ -14,9 +14,9 @@ from yuxi.storage.postgres.models_business import APIKey, Department, User
 from yuxi.repositories.department_repository import DepartmentRepository
 from yuxi.repositories.user_repository import UserRepository
 from server.utils.auth_middleware import get_superadmin_user, get_admin_user, get_db
-from server.utils.auth_utils import AuthUtils
-from server.utils.common_utils import log_operation
-from server.utils.user_utils import is_valid_phone_number
+from yuxi.utils.auth_utils import AuthUtils
+from yuxi.services.operation_log_service import log_operation
+from yuxi.services.user_identity_service import is_valid_phone_number
 
 # 创建路由器
 department = APIRouter(prefix="/departments", tags=["department"])

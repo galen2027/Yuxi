@@ -10,8 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
-from yuxi.services.remote_skill_install_service import list_remote_skills, search_remote_skills
-from yuxi.services.skill_service import (
+from yuxi.agents.skills.service import (
     confirm_skill_install_draft,
     create_skill_node,
     delete_skill,
@@ -35,6 +34,7 @@ from yuxi.services.skill_service import (
     update_skill_file,
     update_skill_share_config,
 )
+from yuxi.services.remote_skill_install_service import list_remote_skills, search_remote_skills
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.logging_config import logger
 

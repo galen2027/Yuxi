@@ -16,22 +16,23 @@ async def _fake_normalize_agent_context_config(context, **_kwargs):
     return dict(context or {})
 
 
-class _FakeAgentConfigRepo:
-    def __init__(self, _db):
-        pass
-
-    async def get_by_id(self, config_id: int):
-        return SimpleNamespace(id=config_id, uid="user-1", agent_id="test-agent")
-
-    async def get_or_create_default(self, *, uid: str, agent_id: str, created_by: str):
-        return SimpleNamespace(id=999, uid=uid, agent_id=agent_id, created_by=created_by)
-
-
 class _FakeConvRepo:
     def __init__(self, _db):
         self.saved_messages: list[dict] = []
-        self.bound_agent_configs: list[tuple[str, int]] = []
         self.conversations: dict[str, SimpleNamespace] = {}
+
+    def _conversation(self, thread_id: str) -> SimpleNamespace:
+        return self.conversations.setdefault(
+            thread_id,
+            SimpleNamespace(
+                id=1,
+                uid="user-1",
+                agent_id="test-agent",
+                thread_id=thread_id,
+                status="active",
+                extra_metadata={},
+            ),
+        )
 
     async def add_message_by_thread_id(
         self,
@@ -56,25 +57,25 @@ class _FakeConvRepo:
         return SimpleNamespace(id=1)
 
     async def get_conversation_by_thread_id(self, thread_id: str):
-        return self.conversations.get(thread_id)
+        return self._conversation(thread_id)
 
-    async def create_conversation(self, *, uid: str, agent_id: str, thread_id: str):
+    async def create_conversation(self, *, uid: str, agent_id: str, thread_id: str, metadata: dict | None = None):
         conversation = SimpleNamespace(
+            id=1,
             uid=uid,
             agent_id=agent_id,
             thread_id=thread_id,
-            extra_metadata={},
+            status="active",
+            extra_metadata=metadata or {},
         )
         self.conversations[thread_id] = conversation
         return conversation
 
-    async def bind_agent_config(self, thread_id: str, agent_config_id: int):
-        conversation = self.conversations.setdefault(
-            thread_id,
-            SimpleNamespace(uid="user-1", agent_id="test-agent", thread_id=thread_id, extra_metadata={}),
-        )
-        conversation.extra_metadata["agent_config_id"] = agent_config_id
-        self.bound_agent_configs.append((thread_id, agent_config_id))
+    async def get_attachments_by_request_id(self, conversation_id: int, request_id: str):
+        return []
+
+    async def bind_attachments_to_request(self, conversation_id: int, request_id: str, file_ids: list[str]):
+        return []
 
 
 @pytest.mark.asyncio
@@ -101,10 +102,8 @@ async def test_agent_chat_uses_invoke_messages_and_persists_langgraph_state(monk
         async def get_graph(self):
             return FakeGraph()
 
-    async def fake_get_agent_config_by_id(db, user, agent_config_id):
-        assert user.uid == "user-1"
-        assert agent_config_id == 123
-        return SimpleNamespace(agent_id="test-agent", config_json={"context": {"temperature": 0.1}})
+    async def fake_resolve_agent_runtime(**_kwargs):
+        return SimpleNamespace(slug="test-agent", backend_id="ChatbotAgent"), FakeAgent(), {"temperature": 0.1}
 
     async def fake_save_messages_from_langgraph_state(*, agent_instance, thread_id, conv_repo, config_dict, trace_info):
         calls["saved_state"] = {
@@ -135,17 +134,15 @@ async def test_agent_chat_uses_invoke_messages_and_persists_langgraph_state(monk
     monkeypatch.setattr(svc, "flush_langfuse", lambda: calls.setdefault("flushed", True))
     monkeypatch.setattr(svc, "_load_workspace_agents_prompt", _empty_agents_prompt)
 
-    monkeypatch.setattr(svc.agent_manager, "get_agent", lambda agent_id: FakeAgent())
-    monkeypatch.setattr(svc, "get_agent_config_by_id", fake_get_agent_config_by_id)
+    monkeypatch.setattr(svc, "_resolve_agent_runtime", fake_resolve_agent_runtime)
     monkeypatch.setattr(svc, "normalize_agent_context_config", _fake_normalize_agent_context_config)
     monkeypatch.setattr(svc, "ConversationRepository", _FakeConvRepo)
-    monkeypatch.setattr(svc, "AgentConfigRepository", _FakeAgentConfigRepo)
     monkeypatch.setattr(svc, "save_messages_from_langgraph_state", fake_save_messages_from_langgraph_state)
     monkeypatch.setattr(svc.content_guard, "check", fake_guard_check)
 
     result = await svc.agent_chat(
         query="hello",
-        agent_config_id=123,
+        agent_id="test-agent",
         thread_id="thread-1",
         meta={"request_id": "req-1"},
         image_content=None,
@@ -176,7 +173,6 @@ async def test_agent_chat_uses_invoke_messages_and_persists_langgraph_state(monk
         "langfuse_trace_id": "trace-runtime",
         "langfuse_session_id": "thread-1",
     }
-    assert calls["saved_state"]["conv_repo"].bound_agent_configs == [("thread-1", 123)]
     assert calls["flushed"] is True
 
 
@@ -203,8 +199,8 @@ async def test_agent_chat_sync_returns_finished_even_when_state_has_interrupt(mo
         async def get_graph(self):
             return FakeGraph()
 
-    async def fake_get_agent_config_by_id(db, user, agent_config_id):
-        return SimpleNamespace(agent_id="test-agent", config_json={"context": {}})
+    async def fake_resolve_agent_runtime(**_kwargs):
+        return SimpleNamespace(slug="test-agent", backend_id="ChatbotAgent"), FakeAgent(), {}
 
     async def fake_save_messages_from_langgraph_state(*, agent_instance, thread_id, conv_repo, config_dict, trace_info):
         return None
@@ -221,17 +217,15 @@ async def test_agent_chat_sync_returns_finished_even_when_state_has_interrupt(mo
     monkeypatch.setattr(svc, "flush_langfuse", lambda: None)
     monkeypatch.setattr(svc, "_load_workspace_agents_prompt", _empty_agents_prompt)
 
-    monkeypatch.setattr(svc.agent_manager, "get_agent", lambda agent_id: FakeAgent())
-    monkeypatch.setattr(svc, "get_agent_config_by_id", fake_get_agent_config_by_id)
+    monkeypatch.setattr(svc, "_resolve_agent_runtime", fake_resolve_agent_runtime)
     monkeypatch.setattr(svc, "normalize_agent_context_config", _fake_normalize_agent_context_config)
     monkeypatch.setattr(svc, "ConversationRepository", _FakeConvRepo)
-    monkeypatch.setattr(svc, "AgentConfigRepository", _FakeAgentConfigRepo)
     monkeypatch.setattr(svc, "save_messages_from_langgraph_state", fake_save_messages_from_langgraph_state)
     monkeypatch.setattr(svc.content_guard, "check", fake_guard_check)
 
     result = await svc.agent_chat(
         query="hello",
-        agent_config_id=456,
+        agent_id="test-agent",
         thread_id="thread-2",
         meta={"request_id": "req-2"},
         image_content=None,

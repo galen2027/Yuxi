@@ -1,5 +1,3 @@
-import traceback
-
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,7 +58,7 @@ async def submit_message_feedback_view(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error submitting message feedback: {e}, {traceback.format_exc()}")
+        logger.exception(f"Error submitting message feedback: {e}")
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to submit feedback: {str(e)}")
 
@@ -91,5 +89,5 @@ async def get_message_feedback_view(
         }
 
     except Exception as e:
-        logger.error(f"Error getting message feedback: {e}")
+        logger.exception(f"Error getting message feedback: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get feedback: {str(e)}")

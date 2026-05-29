@@ -76,6 +76,7 @@ async def test_sync_thread_attachment_state_updates_graph(monkeypatch: pytest.Mo
         thread_id="thread-1",
         uid="u1",
         agent_id="ChatbotAgent",
+        backend_id=None,
         attachments=attachments,
     )
 
@@ -97,6 +98,7 @@ async def test_sync_thread_attachment_state_skips_when_agent_missing(monkeypatch
         thread_id="thread-1",
         uid="u1",
         agent_id="MissingAgent",
+        backend_id=None,
         attachments=[],
     )
 

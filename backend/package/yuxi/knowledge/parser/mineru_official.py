@@ -13,8 +13,8 @@ from typing import Any
 
 import requests
 
-from yuxi.plugins.parser.base import BaseDocumentProcessor, DocumentParserException
-from yuxi.plugins.parser.zip_utils import process_zip_file_sync
+from yuxi.knowledge.parser.base import BaseDocumentProcessor, DocumentParserException
+from yuxi.knowledge.parser.zip_utils import process_zip_file_sync
 from yuxi.utils import hashstr, logger
 
 

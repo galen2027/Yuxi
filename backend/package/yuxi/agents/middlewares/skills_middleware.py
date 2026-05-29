@@ -14,9 +14,9 @@ from langgraph.types import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.agents.toolkits import get_all_tool_instances
-from yuxi.repositories.skill_repository import SkillRepository
-from yuxi.services.mcp_service import get_enabled_mcp_tools
-from yuxi.services.skill_service import is_valid_skill_slug, list_accessible_skills, normalize_string_list
+from yuxi.agents.skills.repository import SkillRepository
+from yuxi.agents.mcp.service import get_enabled_mcp_tools
+from yuxi.agents.skills.service import is_valid_skill_slug, list_accessible_skills, normalize_string_list
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.utils.logging_config import logger
 

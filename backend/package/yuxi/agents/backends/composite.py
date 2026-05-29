@@ -8,7 +8,7 @@ from deepagents.backends.composite import (
 )
 from deepagents.backends.protocol import FileInfo
 
-from yuxi.services.skill_service import normalize_string_list
+from yuxi.agents.skills.service import normalize_string_list
 
 from .sandbox import ProvisionerSandboxBackend
 from .skills_backend import SelectedSkillsReadonlyBackend

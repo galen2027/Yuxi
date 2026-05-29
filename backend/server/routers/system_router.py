@@ -161,7 +161,7 @@ async def check_ocr_services_health(current_user: User = Depends(get_admin_user)
     检查所有OCR服务的健康状态
     返回各个OCR服务的可用性信息
     """
-    from yuxi.plugins.parser.factory import DocumentProcessorFactory
+    from yuxi.knowledge.parser.factory import DocumentProcessorFactory
 
     try:
         # 使用统一的健康检查接口

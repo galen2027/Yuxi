@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from yuxi.services import mcp_service
+from yuxi.agents.mcp import service as mcp_service
 
 
 class _FakeClient:

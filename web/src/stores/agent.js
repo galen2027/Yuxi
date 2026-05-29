@@ -243,16 +243,8 @@ export const useAgentStore = defineStore(
       agentConfig.value = { ...originalAgentConfig.value }
     }
 
-    function updateConfigItem(key, value) {
-      agentConfig.value[key] = value
-    }
-
     function updateAgentConfig(updates) {
       Object.assign(agentConfig.value, updates)
-    }
-
-    function clearError() {
-      error.value = null
     }
 
     function reset() {
@@ -301,9 +293,7 @@ export const useAgentStore = defineStore(
       updateAgentProfile,
       deleteAgent,
       resetAgentConfig,
-      updateConfigItem,
       updateAgentConfig,
-      clearError,
       reset
     }
   },

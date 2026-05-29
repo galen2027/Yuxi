@@ -118,7 +118,7 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
 
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.services.tool_service",
+        "yuxi.agents.toolkits.service",
         types.SimpleNamespace(
             get_tool_metadata=lambda category=None: [
                 {"slug": "ask_user_question", "name": "Ask User", "description": ""},
@@ -133,17 +133,17 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.services.mcp_service",
+        "yuxi.agents.mcp.service",
         types.SimpleNamespace(get_all_mcp_servers=fake_get_all_mcp_servers),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.services.skill_service",
+        "yuxi.agents.skills.service",
         types.SimpleNamespace(list_accessible_skills=fake_list_skills),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.services.subagent_service",
+        "yuxi.agents.subagents.service",
         types.SimpleNamespace(get_all_subagents=fake_get_all_subagents),
     )
 
@@ -236,7 +236,7 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.services.tool_service",
+        "yuxi.agents.toolkits.service",
         types.SimpleNamespace(
             get_tool_metadata=lambda category=None: [
                 {"slug": "ask_user_question", "name": "Ask User", "description": ""}
@@ -250,17 +250,17 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.services.mcp_service",
+        "yuxi.agents.mcp.service",
         types.SimpleNamespace(get_all_mcp_servers=fake_get_all_mcp_servers),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.services.skill_service",
+        "yuxi.agents.skills.service",
         types.SimpleNamespace(list_accessible_skills=fake_list_skills),
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.services.subagent_service",
+        "yuxi.agents.subagents.service",
         types.SimpleNamespace(get_all_subagents=fake_get_all_subagents),
     )
 

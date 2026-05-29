@@ -1,4 +1,4 @@
-from yuxi.services.model_cache import ModelCache
+from yuxi.models.providers.cache import ModelCache
 
 
 def test_model_cache_prefers_model_base_url_override(monkeypatch):

@@ -17,7 +17,7 @@ from deepagents.backends.protocol import (
 from deepagents.backends.sandbox import BaseSandbox
 
 from yuxi import config as conf
-from yuxi.services.skill_service import sync_thread_readable_skills
+from yuxi.agents.skills.service import sync_thread_readable_skills
 from yuxi.utils.logging_config import logger
 
 from .provider import get_sandbox_provider, sandbox_id_for_thread

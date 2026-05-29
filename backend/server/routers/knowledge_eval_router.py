@@ -1,4 +1,3 @@
-import traceback
 from typing import Any, Literal
 from urllib.parse import quote
 
@@ -10,6 +9,7 @@ from yuxi.knowledge.eval.benchmark_generation import (
     DEFAULT_BENCHMARK_GENERATION_CONCURRENCY,
     MAX_BENCHMARK_GENERATION_CONCURRENCY,
 )
+from yuxi.knowledge.eval.service import EvaluationService
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils import logger
 
@@ -46,8 +46,6 @@ async def upload_evaluation_dataset(
     current_user: User = Depends(get_admin_user),
 ):
     """上传评估数据集"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         if not file.filename.endswith(".jsonl"):
             raise HTTPException(status_code=400, detail="仅支持JSONL格式文件")
@@ -65,21 +63,19 @@ async def upload_evaluation_dataset(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"上传评估数据集失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"上传评估数据集失败: {e}")
         raise HTTPException(status_code=500, detail=f"上传评估数据集失败: {str(e)}")
 
 
 @evaluation.get("/databases/{kb_id}/datasets")
 async def list_evaluation_datasets(kb_id: str, current_user: User = Depends(get_admin_user)):
     """获取知识库的评估数据集列表"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         service = EvaluationService()
         datasets = await service.list_datasets(kb_id)
         return {"message": "success", "data": datasets}
     except Exception as e:
-        logger.error(f"获取评估数据集列表失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"获取评估数据集列表失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取评估数据集列表失败: {str(e)}")
 
 
@@ -88,8 +84,6 @@ async def get_evaluation_dataset(
     kb_id: str, dataset_id: str, page: int = 1, page_size: int = 10, current_user: User = Depends(get_admin_user)
 ):
     """获取评估数据集详情"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         if page < 1:
             raise HTTPException(status_code=400, detail="页码必须大于0")
@@ -106,15 +100,13 @@ async def get_evaluation_dataset(
             raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"获取评估数据集详情失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"获取评估数据集详情失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取评估数据集详情失败: {str(e)}")
 
 
 @evaluation.get("/datasets/{dataset_id}/download")
 async def download_evaluation_dataset(dataset_id: str, current_user: User = Depends(get_admin_user)):
     """导出评估数据集 JSONL"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         service = EvaluationService()
         export_info = await service.export_dataset_jsonl(dataset_id)
@@ -129,15 +121,13 @@ async def download_evaluation_dataset(dataset_id: str, current_user: User = Depe
             raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"导出评估数据集失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"导出评估数据集失败: {e}")
         raise HTTPException(status_code=500, detail=f"导出评估数据集失败: {str(e)}")
 
 
 @evaluation.delete("/datasets/{dataset_id}")
 async def delete_evaluation_dataset(dataset_id: str, current_user: User = Depends(get_admin_user)):
     """删除评估数据集"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         service = EvaluationService()
         await service.delete_dataset(dataset_id)
@@ -147,7 +137,7 @@ async def delete_evaluation_dataset(dataset_id: str, current_user: User = Depend
             raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"删除评估数据集失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"删除评估数据集失败: {e}")
         raise HTTPException(status_code=500, detail=f"删除评估数据集失败: {str(e)}")
 
 
@@ -156,8 +146,6 @@ async def generate_evaluation_dataset(
     kb_id: str, request: GenerateDatasetRequest, current_user: User = Depends(get_admin_user)
 ):
     """自动生成评估数据集"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         service = EvaluationService()
         result = await service.generate_dataset(
@@ -176,15 +164,13 @@ async def generate_evaluation_dataset(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"生成评估数据集失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"生成评估数据集失败: {e}")
         raise HTTPException(status_code=500, detail=f"生成评估数据集失败: {str(e)}")
 
 
 @evaluation.post("/databases/{kb_id}/runs")
 async def run_evaluation(kb_id: str, request: RunEvaluationRequest, current_user: User = Depends(get_admin_user)):
     """运行RAG评估"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         service = EvaluationService()
         run_id = await service.run_evaluation(
@@ -199,21 +185,19 @@ async def run_evaluation(kb_id: str, request: RunEvaluationRequest, current_user
             raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"启动评估失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"启动评估失败: {e}")
         raise HTTPException(status_code=500, detail=f"启动评估失败: {str(e)}")
 
 
 @evaluation.get("/databases/{kb_id}/runs")
 async def list_evaluation_runs(kb_id: str, current_user: User = Depends(get_admin_user)):
     """获取知识库评估运行历史"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         service = EvaluationService()
         runs = await service.list_runs(kb_id)
         return {"message": "success", "data": runs}
     except Exception as e:
-        logger.error(f"获取评估运行历史失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"获取评估运行历史失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取评估运行历史失败: {str(e)}")
 
 
@@ -227,8 +211,6 @@ async def get_evaluation_run_results(
     current_user: User = Depends(get_admin_user),
 ):
     """获取评估运行结果"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         if page < 1:
             raise HTTPException(status_code=400, detail="页码必须大于0")
@@ -245,15 +227,13 @@ async def get_evaluation_run_results(
             raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"获取评估运行结果失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"获取评估运行结果失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取评估运行结果失败: {str(e)}")
 
 
 @evaluation.delete("/databases/{kb_id}/runs/{run_id}")
 async def delete_evaluation_run(kb_id: str, run_id: str, current_user: User = Depends(get_admin_user)):
     """删除评估运行"""
-    from yuxi.knowledge.eval.service import EvaluationService
-
     try:
         service = EvaluationService()
         await service.delete_run(kb_id, run_id)
@@ -263,5 +243,5 @@ async def delete_evaluation_run(kb_id: str, run_id: str, current_user: User = De
             raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"删除评估运行失败: {e}, {traceback.format_exc()}")
+        logger.exception(f"删除评估运行失败: {e}")
         raise HTTPException(status_code=500, detail=f"删除评估运行失败: {str(e)}")

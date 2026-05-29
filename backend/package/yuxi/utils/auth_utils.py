@@ -5,11 +5,11 @@ from typing import Any
 
 import jwt
 from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHash, VerifyMismatchError, VerificationError
+from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 from yuxi.utils.datetime_utils import utc_now
 
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRATION = 7 * 24 * 60 * 60  # 7天过期
+JWT_EXPIRATION = 7 * 24 * 60 * 60
 JWT_AUDIENCE = "yuxi-know-api"
 PUBLIC_DEFAULT_JWT_SECRET_KEY = "yuxi_know_secure_key"
 PASSWORD_HASHER = PasswordHasher()
@@ -45,16 +45,12 @@ def _get_jwt_issuer() -> str:
 
 
 class AuthUtils:
-    """认证工具类"""
-
     @staticmethod
     def hash_password(password: str) -> str:
-        """使用 Argon2 哈希密码"""
         return PASSWORD_HASHER.hash(password)
 
     @staticmethod
     def verify_password(stored_password: str, provided_password: str) -> bool:
-        """验证密码"""
         if not stored_password.startswith("$argon2"):
             return False
         try:
@@ -64,26 +60,15 @@ class AuthUtils:
 
     @staticmethod
     def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
-        """创建JWT访问令牌"""
         to_encode = data.copy()
-
-        # 设置过期时间
-        if expires_delta:
-            expire = utc_now() + expires_delta
-        else:
-            expire = utc_now() + timedelta(seconds=JWT_EXPIRATION)
-
+        expire = utc_now() + (expires_delta or timedelta(seconds=JWT_EXPIRATION))
         to_encode.update({"exp": expire, "iss": _get_jwt_issuer(), "aud": JWT_AUDIENCE})
-
-        # 编码JWT
-        encoded_jwt = jwt.encode(to_encode, _get_jwt_secret_key(), algorithm=JWT_ALGORITHM)
-        return encoded_jwt
+        return jwt.encode(to_encode, _get_jwt_secret_key(), algorithm=JWT_ALGORITHM)
 
     @staticmethod
     def decode_token(token: str) -> dict[str, Any] | None:
-        """解码验证JWT令牌"""
         try:
-            payload = jwt.decode(
+            return jwt.decode(
                 token,
                 _get_jwt_secret_key(),
                 algorithms=[JWT_ALGORITHM],
@@ -91,15 +76,13 @@ class AuthUtils:
                 audience=JWT_AUDIENCE,
                 options={"require": ["exp", "sub", "iss", "aud"]},
             )
-            return payload
         except (jwt.PyJWTError, ValueError):
             return None
 
     @staticmethod
     def verify_access_token(token: str) -> dict[str, Any]:
-        """验证访问令牌，如果无效则抛出异常"""
         try:
-            payload = jwt.decode(
+            return jwt.decode(
                 token,
                 _get_jwt_secret_key(),
                 algorithms=[JWT_ALGORITHM],
@@ -107,7 +90,6 @@ class AuthUtils:
                 audience=JWT_AUDIENCE,
                 options={"require": ["exp", "sub", "iss", "aud"]},
             )
-            return payload
         except jwt.ExpiredSignatureError:
             raise ValueError("令牌已过期")
         except jwt.InvalidTokenError:

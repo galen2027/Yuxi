@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion, RapidOCR
 
-from yuxi.plugins.parser.base import BaseDocumentProcessor, OCRException
+from yuxi.knowledge.parser.base import BaseDocumentProcessor, OCRException
 from yuxi.utils import logger
 
 

@@ -12,7 +12,7 @@ from yuxi.storage.postgres.models_business import Base as BusinessBase
 from yuxi.storage.postgres.models_knowledge import Base as KnowledgeBase
 from yuxi.utils import logger
 
-from server.utils.singleton import SingletonMeta
+from yuxi.utils.singleton import SingletonMeta
 
 # 合并两个 Base
 CombinedBase = declarative_base()

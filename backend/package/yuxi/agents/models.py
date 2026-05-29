@@ -1,7 +1,7 @@
 from langchain.chat_models import BaseChatModel
 from pydantic import SecretStr
 
-from yuxi.services.model_cache import model_cache
+from yuxi.models.providers.cache import model_cache
 from yuxi.utils import get_docker_safe_url
 from yuxi.utils.logging_config import logger
 

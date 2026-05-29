@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.services.skill_service import import_skill_dir, is_valid_skill_slug
+from yuxi.agents.skills.service import import_skill_dir, is_valid_skill_slug
 
 if TYPE_CHECKING:
     from yuxi.storage.postgres.models_business import Skill
@@ -200,16 +200,8 @@ async def install_remote_skill(
             cwd=workdir,
         )
 
-        base_dir = Path(temp_home).resolve()
-        skills_dir = base_dir / ".agents" / "skills"
-        # Scan for the installed skill directory rather than constructing the path
-        # from user input, to avoid path traversal concerns
-        installed_dir = None
-        if skills_dir.is_dir():
-            for candidate in skills_dir.iterdir():
-                if candidate.name == normalized_skill and candidate.is_dir():
-                    installed_dir = candidate
-                    break
+        skills_dir = Path(temp_home).resolve() / ".agents" / "skills"
+        installed_dir = _find_skill_dir(skills_dir, normalized_skill)
         if installed_dir is None:
             raise ValueError("skills CLI 未生成预期的技能目录")
 

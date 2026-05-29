@@ -1,6 +1,5 @@
 import asyncio
 import json
-import traceback
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -13,7 +12,7 @@ from yuxi.agents.backends.sandbox.paths import sandbox_workspace_agents_prompt_f
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.context import normalize_agent_context_config
 from yuxi.agents.state import AgentStatePayload
-from yuxi.plugins.guard import content_guard
+from yuxi.services.guard import content_guard
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.services.conversation_service import serialize_attachment
@@ -270,8 +269,7 @@ async def save_partial_message(
         )
 
     except Exception as e:
-        logger.error(f"Error saving message: {e}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Error saving message: {e}")
         return None
 
 
@@ -445,8 +443,7 @@ async def check_and_handle_interrupts(
             yield make_chunk(status="ask_user_question_required", meta=meta, **question_payload)
 
     except Exception as e:
-        logger.error(f"Error checking interrupts: {e}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Error checking interrupts: {e}")
 
 
 async def _ensure_thread_bound_agent(
@@ -672,8 +669,7 @@ async def agent_chat(
                 trace_info=trace_info,
             )
         except Exception as e:
-            logger.error(f"Error saving messages from LangGraph state: {e}")
-            logger.error(traceback.format_exc())
+            logger.exception(f"Error saving messages from LangGraph state: {e}")
             return {
                 "status": "error",
                 "error_type": "save_message_error",
@@ -691,7 +687,7 @@ async def agent_chat(
         }
 
     except Exception as e:
-        logger.error(f"Error in agent_chat: {e}, {traceback.format_exc()}")
+        logger.exception(f"Error in agent_chat: {e}")
         return {
             "status": "error",
             "error_type": "unexpected_error",
@@ -927,8 +923,7 @@ async def stream_agent_chat(
                 trace_info=trace_info,
             )
         except Exception as e:
-            logger.error(f"Error saving messages from LangGraph state: {e}")
-            logger.error(traceback.format_exc())
+            logger.exception(f"Error saving messages from LangGraph state: {e}")
             yield make_chunk(status="warning", message=f"消息保存失败: {e}", meta=meta)
 
         yield make_chunk(status="finished", meta=meta)
@@ -962,7 +957,7 @@ async def stream_agent_chat(
         yield make_chunk(status="interrupted", message="对话已中断", meta=meta)
 
     except Exception as e:
-        logger.error(f"Error streaming messages: {e}, {traceback.format_exc()}")
+        logger.exception(f"Error streaming messages: {e}")
 
         error_msg = f"Error streaming messages: {e}"
         error_type = "unexpected_error"
@@ -1095,8 +1090,7 @@ async def stream_agent_resume(
                 trace_info=trace_info,
             )
         except Exception as e:
-            logger.error(f"Error saving messages from LangGraph state: {e}")
-            logger.error(traceback.format_exc())
+            logger.exception(f"Error saving messages from LangGraph state: {e}")
             yield make_resume_chunk(status="warning", message=f"消息保存失败: {e}", meta=meta)
 
         yield make_resume_chunk(status="finished", meta=meta)
@@ -1117,7 +1111,7 @@ async def stream_agent_resume(
         yield make_resume_chunk(status="interrupted", message="对话恢复已中断", meta=meta)
 
     except Exception as e:
-        logger.error(f"Error during resume: {e}, {traceback.format_exc()}")
+        logger.exception(f"Error during resume: {e}")
 
         async with pg_manager.get_async_session_context() as new_db:
             new_conv_repo = ConversationRepository(new_db)

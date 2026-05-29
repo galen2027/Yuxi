@@ -1,11 +1,11 @@
-from yuxi.plugins.parser.base import (
+from yuxi.knowledge.parser.base import (
     BaseDocumentProcessor,
     DocumentParserException,
     DocumentProcessorException,
     OCRException,
 )
-from yuxi.plugins.parser.factory import DocumentProcessorFactory
-from yuxi.plugins.parser.unified import (
+from yuxi.knowledge.parser.factory import DocumentProcessorFactory
+from yuxi.knowledge.parser.unified import (
     SUPPORTED_FILE_EXTENSIONS,
     MarkdownParseResult,
     Parser,

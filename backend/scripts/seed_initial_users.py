@@ -16,6 +16,8 @@ for import_path in (APP_ROOT, APP_ROOT / "package"):
         sys.path.insert(0, import_path_str)
 
 SUPERADMIN_UID = "zwj"
+SUPERADMIN_NAME = "张文杰"
+SUPERADMIN_PHONE_NUMBER = "15251638888"
 SUPERADMIN_PASSWORD = "zwj12138"
 DEFAULT_USER_PASSWORD = "yuxi123456"
 
@@ -57,7 +59,7 @@ async def ensure_uninitialized(session) -> None:
 
 
 async def seed_initial_users() -> None:
-    from server.utils.auth_utils import AuthUtils
+    from yuxi.utils.auth_utils import AuthUtils
     from yuxi.storage.postgres.manager import pg_manager
     from yuxi.storage.postgres.models_business import Department, User
     from yuxi.utils.datetime_utils import utc_now_naive
@@ -83,8 +85,9 @@ async def seed_initial_users() -> None:
 
             users = [
                 User(
-                    username=SUPERADMIN_UID,
+                    username=SUPERADMIN_NAME,
                     uid=SUPERADMIN_UID,
+                    phone_number=SUPERADMIN_PHONE_NUMBER,
                     password_hash=AuthUtils.hash_password(SUPERADMIN_PASSWORD),
                     role="superadmin",
                     department_id=departments["dev"].id,
@@ -131,7 +134,10 @@ def main() -> int:
         print(f"初始化种子用户失败：{exc}", file=sys.stderr)
         return 1
 
-    print("初始化完成：已创建超级管理员 zwj、3 个部门、6 个部门管理员和 14 个普通用户。")
+    print(
+        f"初始化完成：已创建超级管理员 {SUPERADMIN_NAME}（{SUPERADMIN_UID}）、"
+        "3 个部门、6 个部门管理员和 14 个普通用户。"
+    )
     print("超级管理员密码：zwj12138")
     print("部门管理员和普通用户默认密码：yuxi123456")
     return 0

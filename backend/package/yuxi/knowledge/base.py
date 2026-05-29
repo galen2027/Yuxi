@@ -314,7 +314,7 @@ class KnowledgeBase(ABC):
         self._add_to_processing_queue(file_id)
 
         try:
-            from yuxi.plugins.parser.unified import Parser
+            from yuxi.knowledge.parser.unified import Parser
 
             # Prepare params
             params = file_meta.get("processing_params", {}) or {}

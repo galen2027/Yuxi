@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.services import skill_service as svc
-from yuxi.services import tool_service
+from yuxi.agents.skills import service as svc
+from yuxi.agents.toolkits import service as tool_service
 from yuxi.storage.postgres.models_business import Skill, User
 
 

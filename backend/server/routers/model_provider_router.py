@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
-from yuxi.services.model_provider_service import (
+from yuxi.models.providers.service import (
     check_credential_status,
     create_provider_config,
     delete_provider_config,
@@ -27,7 +27,7 @@ model_providers = APIRouter(prefix="/system/model-providers", tags=["model-provi
 
 async def _refresh_model_cache() -> None:
     """刷新模型缓存（CRUD 操作后调用）。"""
-    from yuxi.services.model_cache import model_cache
+    from yuxi.models.providers.cache import model_cache
 
     try:
         async with pg_manager.get_async_session_context() as session:
@@ -196,7 +196,7 @@ async def refresh_model_cache(
 ):
     """强制刷新模型缓存，从数据库重新加载所有供应商配置到 Redis。"""
     await _refresh_model_cache()
-    from yuxi.services.model_cache import model_cache
+    from yuxi.models.providers.cache import model_cache
 
     return {"success": True, "message": "缓存已刷新", "model_count": len(model_cache.get_all_specs())}
 
@@ -211,7 +211,7 @@ async def get_v2_models(
     v2 模型 spec 格式: provider_id:model_id（冒号分隔）
     返回数据供前端模型选择器使用。
     """
-    from yuxi.services.model_cache import model_cache
+    from yuxi.models.providers.cache import model_cache
 
     grouped = model_cache.get_specs_grouped_by_provider(model_type)
 

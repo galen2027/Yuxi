@@ -15,7 +15,7 @@ from server.utils.auth_middleware import get_admin_user, get_required_user
 from yuxi import config, knowledge_base
 from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, MilvusGraphService
-from yuxi.plugins.parser import Parser, SUPPORTED_FILE_EXTENSIONS, is_supported_file_extension
+from yuxi.knowledge.parser import Parser, SUPPORTED_FILE_EXTENSIONS, is_supported_file_extension
 from yuxi.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url
 from yuxi.knowledge.utils.mindmap_utils import (
     generate_database_mindmap,
@@ -28,7 +28,7 @@ from yuxi.knowledge.utils.sample_question_utils import (
     get_database_sample_questions,
 )
 from yuxi.knowledge.utils.url_fetcher import fetch_url_content
-from yuxi.services.model_cache import model_cache
+from yuxi.models.providers.cache import model_cache
 from yuxi.services.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.postgres.models_business import User

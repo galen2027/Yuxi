@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from yuxi.services.tool_service import get_tool_metadata
+from yuxi.agents.toolkits.service import get_tool_metadata
 from server.utils.auth_middleware import get_admin_user
 from yuxi.storage.postgres.models_business import User
 

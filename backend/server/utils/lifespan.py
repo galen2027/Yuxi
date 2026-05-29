@@ -5,9 +5,9 @@ from fastapi import FastAPI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from yuxi.services.task_service import tasker
-from yuxi.services.mcp_service import ensure_builtin_mcp_servers_in_db
-from yuxi.services.model_provider_service import ensure_builtin_model_providers_in_db
-from yuxi.services.subagent_service import init_builtin_subagents
+from yuxi.agents.mcp.service import ensure_builtin_mcp_servers_in_db
+from yuxi.models.providers.service import ensure_builtin_model_providers_in_db
+from yuxi.agents.subagents.service import init_builtin_subagents
 from yuxi.services.run_queue_service import close_queue_clients, get_redis_client
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.knowledge import knowledge_base
@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to ensure builtin MCP servers during startup: {e}")
 
     try:
-        from yuxi.services.skill_service import init_builtin_skills
+        from yuxi.agents.skills.service import init_builtin_skills
 
         async with pg_manager.get_async_session_context() as session:
             await init_builtin_skills(session)
@@ -59,8 +59,8 @@ async def lifespan(app: FastAPI):
 
     # 初始化模型缓存（v2 模型选择使用）
     try:
-        from yuxi.services.model_cache import model_cache
-        from yuxi.services.model_provider_service import get_all_model_providers
+        from yuxi.models.providers.cache import model_cache
+        from yuxi.models.providers.service import get_all_model_providers
 
         async with pg_manager.get_async_session_context() as session:
             providers = await get_all_model_providers(session)

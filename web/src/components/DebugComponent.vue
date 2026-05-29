@@ -449,7 +449,6 @@ const printDatabaseInfo = async () => {
 
     console.log('状态信息:', {
       databaseLoading: databaseStore.state.databaseLoading,
-      refrashing: databaseStore.state.refrashing,
       searchLoading: databaseStore.state.searchLoading,
       lock: databaseStore.state.lock,
       autoRefresh: databaseStore.state.autoRefresh,

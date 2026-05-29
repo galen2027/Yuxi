@@ -7,7 +7,7 @@ import jwt
 import pytest
 from yuxi.utils.datetime_utils import utc_now
 
-from server.utils.auth_utils import JWT_ALGORITHM, JWT_AUDIENCE, AuthUtils
+from yuxi.utils.auth_utils import JWT_ALGORITHM, JWT_AUDIENCE, AuthUtils
 
 
 def test_hash_password_uses_argon2():
