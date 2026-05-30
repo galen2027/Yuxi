@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yuxi.services import remote_skill_install_service as svc
+from yuxi.agents.skills import remote_install as svc
 
 
 def test_parse_available_skills_from_cli_output() -> None:
@@ -242,12 +242,14 @@ async def test_install_remote_skills_batch_partial_failure(monkeypatch: pytest.M
         skill_dir_base = home / ".agents" / "skills"
         (skill_dir_base / "skill-a").mkdir(parents=True, exist_ok=True)
         (skill_dir_base / "skill-a" / "SKILL.md").write_text(
-            "---\nname: skill-a\ndescription: demo\n---\n# A\n", encoding="utf-8",
+            "---\nname: skill-a\ndescription: demo\n---\n# A\n",
+            encoding="utf-8",
         )
         # skill-b directory missing (simulate install failure from CLI side)
         (skill_dir_base / "skill-c").mkdir(parents=True, exist_ok=True)
         (skill_dir_base / "skill-c" / "SKILL.md").write_text(
-            "---\nname: skill-c\ndescription: demo\n---\n# C\n", encoding="utf-8",
+            "---\nname: skill-c\ndescription: demo\n---\n# C\n",
+            encoding="utf-8",
         )
         return "installed"
 
@@ -280,7 +282,8 @@ async def test_install_remote_skills_batch_handles_invalid_names(monkeypatch: py
         skill_dir_base = home / ".agents" / "skills"
         (skill_dir_base / "valid-skill").mkdir(parents=True, exist_ok=True)
         (skill_dir_base / "valid-skill" / "SKILL.md").write_text(
-            "---\nname: valid-skill\ndescription: demo\n---\n# Valid\n", encoding="utf-8",
+            "---\nname: valid-skill\ndescription: demo\n---\n# Valid\n",
+            encoding="utf-8",
         )
         return "installed"
 
@@ -365,4 +368,3 @@ async def test_search_remote_skills(monkeypatch: pytest.MonkeyPatch) -> None:
         }
     ]
     assert captured["args"] == ["npx", "-y", "skills", "find", "web"]
-

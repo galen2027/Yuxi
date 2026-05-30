@@ -16,7 +16,7 @@ from yuxi.knowledge.parser import Parser
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.services.mention_search_service import invalidate_mention_cache
-from yuxi.services.upload_utils import read_upload_with_limit, write_upload_to_path
+from yuxi.utils.upload_utils import read_upload_with_limit, write_upload_to_path
 from yuxi.storage.minio import StorageError, get_minio_client
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import utc_isoformat

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import io
 import mimetypes
 import shutil
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
-import aiofiles
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,65 +22,20 @@ from yuxi.agents.backends.sandbox import (
 )
 from yuxi.agents.backends.skills_backend import SelectedSkillsReadonlyBackend
 from yuxi.agents.skills.service import normalize_string_list
-from yuxi.services.filesystem_service import _resolve_filesystem_state
+from yuxi.services.agent_runtime_service import resolve_thread_agent_runtime_context
+from yuxi.services.file_preview import detect_preview_type
+from yuxi.services.workspace_service import (
+    create_workspace_directory as create_workspace_directory_entry,
+    delete_workspace_path,
+    download_workspace_file as download_workspace_file_response,
+    list_workspace_tree,
+    read_workspace_file_content as read_workspace_file_content_response,
+    upload_workspace_file as upload_workspace_file_entry,
+)
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import utc_isoformat_from_timestamp
 from yuxi.utils.paths import VIRTUAL_PATH_OUTPUTS, VIRTUAL_PATH_UPLOADS, VIRTUAL_PATH_WORKSPACE
 
-_MARKDOWN_EXTENSIONS = frozenset({".md", ".markdown", ".mdx"})
-_PDF_EXTENSIONS = frozenset({".pdf"})
-_TEXT_EXTENSIONS = frozenset(
-    {
-        ".txt",
-        ".text",
-        ".log",
-        ".json",
-        ".jsonl",
-        ".yaml",
-        ".yml",
-        ".toml",
-        ".ini",
-        ".cfg",
-        ".conf",
-        ".csv",
-        ".tsv",
-        ".py",
-        ".js",
-        ".ts",
-        ".jsx",
-        ".tsx",
-        ".vue",
-        ".html",
-        ".htm",
-        ".css",
-        ".less",
-        ".scss",
-        ".xml",
-        ".sql",
-        ".sh",
-        ".bash",
-        ".zsh",
-        ".fish",
-        ".env",
-        ".dockerfile",
-        ".gitignore",
-        ".weather",
-    }
-)
-_IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"})
-_BINARY_SIGNATURES = (
-    b"\x7fELF",
-    b"MZ",
-    b"%PDF-",
-    b"PK\x03\x04",
-    b"PK\x05\x06",
-    b"PK\x07\x08",
-    b"\x89PNG\r\n\x1a\n",
-    b"\xff\xd8\xff",
-    b"GIF87a",
-    b"GIF89a",
-    b"RIFF",
-)
 _PROTECTED_USER_DATA_ROOTS = frozenset(
     {
         VIRTUAL_PATH_WORKSPACE,
@@ -90,49 +43,6 @@ _PROTECTED_USER_DATA_ROOTS = frozenset(
         VIRTUAL_PATH_OUTPUTS,
     }
 )
-
-
-def _detect_preview_type(path: str, raw_content: bytes) -> tuple[str, bool, str | None]:
-    suffix = PurePosixPath(path).suffix.lower()
-    mime_type, _encoding = mimetypes.guess_type(path)
-    head = raw_content[:1024]
-
-    if suffix in _IMAGE_EXTENSIONS or (mime_type and mime_type.startswith("image/")):
-        return "image", True, None
-
-    if suffix in _PDF_EXTENSIONS or mime_type == "application/pdf" or head.startswith(b"%PDF-"):
-        return "pdf", True, None
-
-    if suffix in _MARKDOWN_EXTENSIONS:
-        return "markdown", True, None
-
-    if suffix in _TEXT_EXTENSIONS:
-        return "text", True, None
-
-    if b"\x00" in head:
-        return "unsupported", False, "当前文件是二进制文件，暂不支持预览"
-
-    if any(head.startswith(signature) for signature in _BINARY_SIGNATURES):
-        if head.startswith(b"RIFF") and b"WEBP" in head[:16]:
-            return "image", True, None
-        return "unsupported", False, "当前文件格式暂不支持预览"
-
-    if mime_type:
-        if mime_type.startswith("text/"):
-            return "text", True, None
-        if mime_type in {"application/json", "application/xml", "application/javascript"}:
-            return "text", True, None
-        if mime_type.startswith("application/"):
-            return "unsupported", False, "当前文件格式暂不支持预览"
-
-    if not raw_content:
-        return "text", True, None
-
-    try:
-        raw_content.decode("utf-8")
-        return "text", True, None
-    except UnicodeDecodeError:
-        return "unsupported", False, "当前文件不是可读文本，暂不支持预览"
 
 
 def _normalize_path(path: str | None) -> str:
@@ -247,45 +157,36 @@ def _list_local_entries(thread_id: str, uid: str, actual_path) -> list[dict]:
     return entries
 
 
-def _validate_child_name(name: str, *, field_name: str) -> str:
-    clean_name = str(name or "").strip()
-    if not clean_name:
-        raise HTTPException(status_code=422, detail=f"{field_name} 不能为空")
-    if clean_name in {".", ".."} or "/" in clean_name or "\\" in clean_name:
-        raise HTTPException(status_code=422, detail=f"{field_name} 不能包含路径分隔符")
-    if PurePosixPath(clean_name).name != clean_name:
-        raise HTTPException(status_code=422, detail=f"{field_name} 不能包含路径分隔符")
-    return clean_name
+def _workspace_relative_path(path: str) -> str:
+    if path == VIRTUAL_PATH_WORKSPACE:
+        return "/"
+    if not path.startswith(f"{VIRTUAL_PATH_WORKSPACE}/"):
+        raise HTTPException(status_code=400, detail="当前路径不是工作区路径")
+    return path[len(VIRTUAL_PATH_WORKSPACE) :] or "/"
 
 
-def _resolve_workspace_parent_dir(thread_id: str, uid: str, parent_path: str) -> Path:
-    normalized_parent = _normalize_path(parent_path)
-    if not _is_workspace_path(normalized_parent):
-        raise HTTPException(status_code=400, detail="当前路径不支持写入")
-
-    ensure_thread_dirs(thread_id, uid)
-    try:
-        actual_parent = _resolve_local_user_data_path(thread_id, uid, normalized_parent)
-    except ValueError as exc:
-        # workspace 写入边界按真实路径校验，软链接逃逸应表现为权限拒绝。
-        if "path traversal" in str(exc):
-            raise HTTPException(status_code=403, detail="Access denied") from exc
-        raise
-    if not actual_parent.exists():
-        raise HTTPException(status_code=404, detail="目标目录不存在")
-    if not actual_parent.is_dir():
-        raise HTTPException(status_code=400, detail="目标路径不是目录")
-    return actual_parent
+def _viewer_entry_from_workspace_entry(entry: dict) -> dict:
+    path = str(entry.get("virtual_path") or "")
+    if not path:
+        workspace_path = str(entry.get("path") or "/")
+        path = VIRTUAL_PATH_WORKSPACE if workspace_path == "/" else f"{VIRTUAL_PATH_WORKSPACE}{workspace_path}"
+    is_dir = bool(entry.get("is_dir", False))
+    if is_dir and not path.endswith("/"):
+        path = f"{path}/"
+    return {
+        "path": path,
+        "name": str(entry.get("name", "") or PurePosixPath(path.rstrip("/")).name or path),
+        "is_dir": is_dir,
+        "size": int(entry.get("size", 0) or 0),
+        "modified_at": str(entry.get("modified_at", "") or ""),
+    }
 
 
-def _resolve_new_workspace_child(thread_id: str, uid: str, parent_path: Path, name: str) -> Path:
-    target_path = parent_path / name
-    workspace_root = sandbox_workspace_dir(thread_id, uid).resolve()
-    if not _is_path_within(target_path.resolve(strict=False), workspace_root):
-        raise HTTPException(status_code=403, detail="Access denied")
-    if target_path.exists():
-        raise HTTPException(status_code=400, detail="同名文件或文件夹已存在")
-    return target_path
+def _viewer_response_from_workspace_response(response: dict) -> dict:
+    result = {**response}
+    if "entry" in result and isinstance(result["entry"], dict):
+        result["entry"] = _viewer_entry_from_workspace_entry(result["entry"])
+    return result
 
 
 def _list_user_data_root_entries(thread_id: str, uid: str) -> list[dict]:
@@ -315,7 +216,7 @@ async def _resolve_viewer_state(
     current_user: User,
     db: AsyncSession,
 ):
-    runtime_context = await _resolve_filesystem_state(
+    runtime_context = await resolve_thread_agent_runtime_context(
         thread_id=thread_id,
         user=current_user,
         db=db,
@@ -361,6 +262,13 @@ async def list_viewer_filesystem_tree(
         if _is_user_data_path(normalized_path):
             uid = str(current_user.uid)
             ensure_thread_dirs(thread_id, uid)
+            if _is_workspace_path(normalized_path):
+                response = await list_workspace_tree(
+                    path=_workspace_relative_path(normalized_path),
+                    current_user=current_user,
+                )
+                entries = [_viewer_entry_from_workspace_entry(entry) for entry in response.get("entries", [])]
+                return {"entries": _sort_entries(entries)}
             if normalized_path == USER_DATA_PATH:
                 entries = await asyncio.to_thread(_list_user_data_root_entries, thread_id, uid)
                 return {"entries": _sort_entries(entries)}
@@ -403,13 +311,18 @@ async def read_viewer_file_content(
 
     try:
         if _is_user_data_path(normalized_path):
+            if _is_workspace_path(normalized_path):
+                return await read_workspace_file_content_response(
+                    path=_workspace_relative_path(normalized_path),
+                    current_user=current_user,
+                )
             actual_path = _resolve_local_user_data_path(thread_id, str(current_user.uid), normalized_path)
             if not actual_path.exists():
                 raise HTTPException(status_code=404, detail="文件不存在")
             if not actual_path.is_file():
                 raise HTTPException(status_code=400, detail="当前路径是目录")
             raw_content = await asyncio.to_thread(actual_path.read_bytes)
-            preview_type, supported, message = _detect_preview_type(normalized_path, raw_content)
+            preview_type, supported, message = detect_preview_type(normalized_path, raw_content)
             if preview_type in {"image", "pdf"} or not supported:
                 return {
                     "content": None,
@@ -447,7 +360,7 @@ async def read_viewer_file_content(
         raise HTTPException(status_code=400, detail=str(response.error))
 
     raw_content = response.content or b""
-    preview_type, supported, message = _detect_preview_type(normalized_path, raw_content)
+    preview_type, supported, message = detect_preview_type(normalized_path, raw_content)
 
     if preview_type in {"image", "pdf"}:
         return {
@@ -480,7 +393,7 @@ async def download_viewer_file(
     path: str,
     current_user: User,
     db: AsyncSession,
-) -> StreamingResponse:
+) -> StreamingResponse | FileResponse:
     normalized_path = _normalize_path(path)
     sandbox_backend, skills_backend, _selected_skills = await _resolve_viewer_state(
         thread_id=thread_id,
@@ -490,6 +403,11 @@ async def download_viewer_file(
 
     try:
         if _is_user_data_path(normalized_path):
+            if _is_workspace_path(normalized_path):
+                return await download_workspace_file_response(
+                    path=_workspace_relative_path(normalized_path),
+                    current_user=current_user,
+                )
             actual_path = _resolve_local_user_data_path(thread_id, str(current_user.uid), normalized_path)
             if not actual_path.exists():
                 raise HTTPException(status_code=404, detail="文件不存在")
@@ -558,6 +476,9 @@ async def delete_viewer_file(
         raise HTTPException(status_code=400, detail="当前目录不允许删除")
 
     try:
+        if _is_workspace_path(normalized_path):
+            await delete_workspace_path(path=_workspace_relative_path(normalized_path), current_user=current_user)
+            return {"success": True, "path": normalized_path}
         actual_path = _resolve_local_user_data_path(thread_id, str(current_user.uid), normalized_path)
         if not actual_path.exists():
             raise HTTPException(status_code=404, detail="文件不存在")
@@ -590,21 +511,16 @@ async def create_viewer_directory(
         db=db,
     )
 
-    uid = str(current_user.uid)
-    directory_name = _validate_child_name(name, field_name="文件夹名")
+    normalized_parent = _normalize_path(parent_path)
+    if not _is_workspace_path(normalized_parent):
+        raise HTTPException(status_code=400, detail="当前路径不支持写入")
 
-    try:
-        actual_parent = _resolve_workspace_parent_dir(thread_id, uid, parent_path)
-        target_path = _resolve_new_workspace_child(thread_id, uid, actual_parent, directory_name)
-        await asyncio.to_thread(target_path.mkdir)
-    except FileExistsError as e:
-        raise HTTPException(status_code=400, detail="同名文件或文件夹已存在") from e
-    except PermissionError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-
-    return {"success": True, "entry": _entry_for_local_path(thread_id, uid, target_path)}
+    response = await create_workspace_directory_entry(
+        parent_path=_workspace_relative_path(normalized_parent),
+        name=name,
+        current_user=current_user,
+    )
+    return _viewer_response_from_workspace_response(response)
 
 
 async def upload_viewer_file(
@@ -624,30 +540,13 @@ async def upload_viewer_file(
         db=db,
     )
 
-    uid = str(current_user.uid)
-    file_name = _validate_child_name(Path(file.filename or "").name, field_name="文件名")
-    target_path: Path | None = None
-    created_file = False
-    upload_completed = False
+    normalized_parent = _normalize_path(parent_path)
+    if not _is_workspace_path(normalized_parent):
+        raise HTTPException(status_code=400, detail="当前路径不支持写入")
 
-    try:
-        actual_parent = _resolve_workspace_parent_dir(thread_id, uid, parent_path)
-        target_path = _resolve_new_workspace_child(thread_id, uid, actual_parent, file_name)
-        async with aiofiles.open(target_path, "xb") as buffer:
-            created_file = True
-            while chunk := await file.read(1024 * 1024):
-                await buffer.write(chunk)
-        upload_completed = True
-    except FileExistsError as e:
-        raise HTTPException(status_code=400, detail="同名文件或文件夹已存在") from e
-    except PermissionError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    finally:
-        # 上传来自用户输入，传输中断时清理本次创建的半成品文件。
-        if created_file and not upload_completed and target_path and target_path.exists():
-            with contextlib.suppress(OSError):
-                await asyncio.to_thread(target_path.unlink)
-
-    return {"success": True, "entry": _entry_for_local_path(thread_id, uid, target_path)}
+    response = await upload_workspace_file_entry(
+        parent_path=_workspace_relative_path(normalized_parent),
+        file=file,
+        current_user=current_user,
+    )
+    return _viewer_response_from_workspace_response(response)

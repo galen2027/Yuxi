@@ -22,7 +22,7 @@ from server.utils.auth_middleware import (
 from yuxi.utils.auth_utils import AuthUtils
 from yuxi.services.user_identity_service import generate_unique_uid, validate_username, is_valid_phone_number
 from yuxi.services.operation_log_service import log_operation
-from yuxi.services.upload_utils import upload_image_to_minio
+from yuxi.storage.minio import upload_image_to_minio
 from yuxi.utils.datetime_utils import utc_now_naive
 
 # OIDC 认证相关导入

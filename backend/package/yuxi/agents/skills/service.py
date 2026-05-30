@@ -829,7 +829,7 @@ async def prepare_remote_skill_install(
     skills: list[str],
     operator: User,
 ) -> dict[str, Any]:
-    from yuxi.services.remote_skill_install_service import prepare_remote_skills_batch
+    from yuxi.agents.skills.remote_install import prepare_remote_skills_batch
 
     repo = SkillRepository(db)
     draft_dir = get_skill_drafts_root_dir() / str(uuid.uuid4())

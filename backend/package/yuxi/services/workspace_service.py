@@ -12,8 +12,8 @@ import aiofiles
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from yuxi.agents.backends.sandbox.paths import _global_user_data_dir, ensure_workspace_default_files
-from yuxi.services.upload_utils import MAX_UPLOAD_SIZE_BYTES, write_upload_to_buffer
-from yuxi.services.viewer_filesystem_service import _detect_preview_type
+from yuxi.services.file_preview import detect_preview_type
+from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, write_upload_to_buffer
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import utc_isoformat_from_timestamp
 from yuxi.utils.paths import VIRTUAL_PATH_WORKSPACE, WORKSPACE_DIR_NAME
@@ -155,7 +155,7 @@ async def read_workspace_file_content(*, path: str, current_user: User) -> dict:
         raise HTTPException(status_code=400, detail="当前路径是目录")
 
     raw_content = await asyncio.to_thread(target.read_bytes)
-    preview_type, supported, message = _detect_preview_type(path, raw_content)
+    preview_type, supported, message = detect_preview_type(path, raw_content)
     if preview_type in {"image", "pdf"} or not supported:
         return {
             "content": None,
@@ -191,7 +191,7 @@ async def write_workspace_file_content(*, path: str, content: str, current_user:
         raise HTTPException(status_code=400, detail="当前文件类型不支持编辑")
 
     raw_content = await asyncio.to_thread(target.read_bytes)
-    preview_type, supported, _message = _detect_preview_type(path, raw_content)
+    preview_type, supported, _message = detect_preview_type(path, raw_content)
     if preview_type not in {"markdown", "text"} or not supported:
         raise HTTPException(status_code=400, detail="当前文件类型不支持编辑")
     try:

@@ -539,7 +539,7 @@ class KnowledgeBase(ABC):
         }
 
     async def read_file_preview(self, kb_id: str, file_id: str, variant: str = "parsed") -> dict:
-        from yuxi.services.viewer_filesystem_service import _detect_preview_type
+        from yuxi.services.file_preview import detect_preview_type
 
         file_meta = self._get_file_meta(kb_id, file_id)
         if file_meta.get("is_folder"):
@@ -590,7 +590,7 @@ class KnowledgeBase(ABC):
                 "message": "文件没有可预览的原始内容",
             }
 
-        preview_type, supported, message = _detect_preview_type(filename, b"")
+        preview_type, supported, message = detect_preview_type(filename, b"")
         if preview_type in {"image", "pdf"}:
             return {
                 **response,
@@ -601,7 +601,7 @@ class KnowledgeBase(ABC):
             }
 
         raw_content = await self._read_minio_bytes(original_path)
-        preview_type, supported, message = _detect_preview_type(filename, raw_content)
+        preview_type, supported, message = detect_preview_type(filename, raw_content)
         if preview_type in {"image", "pdf"} or not supported:
             return {
                 **response,

@@ -34,7 +34,7 @@ from yuxi.agents.skills.service import (
     update_skill_file,
     update_skill_share_config,
 )
-from yuxi.services.remote_skill_install_service import list_remote_skills, search_remote_skills
+from yuxi.agents.skills.remote_install import list_remote_skills, search_remote_skills
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.logging_config import logger
 

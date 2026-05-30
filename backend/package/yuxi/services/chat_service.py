@@ -12,7 +12,7 @@ from yuxi.agents.backends.sandbox.paths import sandbox_workspace_agents_prompt_f
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.context import normalize_agent_context_config
 from yuxi.agents.state import AgentStatePayload
-from yuxi.services.guard import content_guard
+from yuxi.utils.guard import content_guard
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.services.conversation_service import serialize_attachment

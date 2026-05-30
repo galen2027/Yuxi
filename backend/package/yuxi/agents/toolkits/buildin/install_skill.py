@@ -146,7 +146,7 @@
 #     skill_names: list[str] | None = None,
 # ) -> Command:
 #     """执行异步安装任务的核心逻辑"""
-#     from yuxi.services.remote_skill_install_service import prepare_remote_skills_batch
+#     from yuxi.agents.skills.remote_install import prepare_remote_skills_batch
 #     from yuxi.agents.skills.service import (
 #         import_skill_dir,
 #         normalize_string_list,

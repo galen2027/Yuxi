@@ -338,7 +338,7 @@ async def test_install_skill_git_with_skill_names_passes_admin_check(mock_pg):
             results=[{"slug": "test-skill", "success": True, "source_dir": Path("/tmp/test-skill")}],
             cleanup=MagicMock(),
         )
-        with patch("yuxi.services.remote_skill_install_service.prepare_remote_skills_batch") as mock_prepare:
+        with patch("yuxi.agents.skills.remote_install.prepare_remote_skills_batch") as mock_prepare:
             mock_prepare.return_value = preparation
 
             with patch("yuxi.agents.skills.service.import_skill_dir") as mock_import:
