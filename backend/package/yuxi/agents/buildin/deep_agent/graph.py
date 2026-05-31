@@ -21,13 +21,14 @@ from yuxi.services.mcp_service import get_tools_from_all_servers
 from yuxi.services.subagent_service import get_subagents_from_names
 from yuxi.utils import logger
 
-from .prompt import DEEP_PROMPT
+from .context import DeepContext
 
 
 class DeepAgent(BaseAgent):
     name = "深度分析"
     description = "具备规划、深度分析和子智能体协作能力的智能体，可以处理复杂的多步骤任务"
     capabilities = ["file_upload", "files"]  # 支持文件上传功能
+    context_schema = DeepContext
     metadata = {"examples": ["调研一下多模态 GraphRAG 的相关论文"]}
 
     def __init__(self, **kwargs):
@@ -52,7 +53,6 @@ class DeepAgent(BaseAgent):
     async def get_graph(self, context=None, **kwargs):
 
         context = context or self.context_schema()  # 获取上下文配置
-        system_prompt = f"{DEEP_PROMPT.strip()}\n\n{context.system_prompt or ''}"
 
         model = load_chat_model(context.model)
         sub_model = load_chat_model(context.subagents_model)
@@ -93,7 +93,8 @@ class DeepAgent(BaseAgent):
         # 使用 create_deep_agent 创建深度智能体
         graph = create_agent(
             model=model,
-            system_prompt=system_prompt,
+            # RuntimeConfigMiddleware injects context.system_prompt before each model call.
+            system_prompt="",
             middleware=[
                 FilesystemMiddleware(backend=create_agent_composite_backend),  # 文件系统后端
                 RuntimeConfigMiddleware(extra_tools=all_mcp_tools),
