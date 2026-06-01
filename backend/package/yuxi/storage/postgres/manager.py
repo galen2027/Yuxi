@@ -378,7 +378,6 @@ class PostgresManager(metaclass=SingletonMeta):
             ),
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS content_hash VARCHAR(128)",
-            "ALTER TABLE IF EXISTS subagents ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE",
             "ALTER TABLE IF EXISTS conversations ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE IF EXISTS mcp_servers ADD COLUMN IF NOT EXISTS env JSONB",
             """
@@ -403,6 +402,7 @@ class PostgresManager(metaclass=SingletonMeta):
                 config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
                 share_config JSONB NOT NULL DEFAULT '{}'::jsonb,
                 is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                is_subagent BOOLEAN NOT NULL DEFAULT FALSE,
                 created_by VARCHAR(64),
                 updated_by VARCHAR(64),
                 created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -411,8 +411,10 @@ class PostgresManager(metaclass=SingletonMeta):
             """,
             "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS backend_id VARCHAR(64)",
             "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS share_config JSONB NOT NULL DEFAULT '{}'::jsonb",
+            "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS is_subagent BOOLEAN NOT NULL DEFAULT FALSE",
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_agents_slug ON agents(slug)",
             "CREATE INDEX IF NOT EXISTS ix_agents_backend_id ON agents(backend_id)",
+            "CREATE INDEX IF NOT EXISTS ix_agents_is_subagent ON agents(is_subagent)",
             "CREATE INDEX IF NOT EXISTS ix_agents_created_by ON agents(created_by)",
             """
             CREATE UNIQUE INDEX IF NOT EXISTS uq_agents_default

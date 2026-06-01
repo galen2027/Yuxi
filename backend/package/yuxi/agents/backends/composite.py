@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from deepagents.backends.composite import (
     CompositeBackend,
     _remap_file_info_path,
@@ -23,11 +25,7 @@ def _coerce_glob_result(result) -> GlobResult:
 
 
 class CustomCompositeBackend(CompositeBackend):
-    """修复 glob 路由逻辑的 CompositeBackend。
-
-    修复内容：当 path 不匹配任何路由时应该只搜索 default 后端，
-    而不是错误地遍历所有路由后端搜索。
-    """
+    """修复 glob 路由逻辑的 CompositeBackend。"""
 
     def glob(self, pattern: str, path: str = "/") -> GlobResult:
         backend, backend_path, route_prefix = _route_for_path(
@@ -88,62 +86,88 @@ class CustomCompositeBackend(CompositeBackend):
         return _coerce_glob_result(await self.default.aglob(pattern, path))
 
 
-def _get_readable_skills_from_runtime(runtime) -> list[str]:
-    context = getattr(runtime, "context", None)
-    selected = getattr(context, "_readable_skills", [])
-    return normalize_string_list(selected if isinstance(selected, list) else [])
+@dataclass(frozen=True)
+class _BackendScope:
+    thread_id: str
+    uid: str
+    readable_skills: list[str]
+    file_thread_id: str
+    skills_thread_id: str
 
+    @classmethod
+    def from_runtime(cls, runtime) -> _BackendScope:
+        config = getattr(runtime, "config", None)
+        configurable = config.get("configurable", {}) if isinstance(config, dict) else {}
+        context = getattr(runtime, "context", None)
+        state = getattr(runtime, "state", None)
+        return cls.from_sources(
+            configurable if isinstance(configurable, dict) else {},
+            context,
+            state if isinstance(state, dict) else {},
+            readable_skills_source=context,
+            error_context="runtime configurable context",
+        )
 
-def _extract_thread_id(runtime) -> str:
-    config = getattr(runtime, "config", None)
-    if isinstance(config, dict):
-        configurable = config.get("configurable", {})
-        if isinstance(configurable, dict):
-            thread_id = configurable.get("thread_id")
-            if isinstance(thread_id, str) and thread_id.strip():
-                return thread_id.strip()
+    @classmethod
+    def from_sources(cls, *sources, readable_skills_source, error_context: str) -> _BackendScope:
+        def string_value(key: str) -> str | None:
+            for source in sources:
+                value = source.get(key) if isinstance(source, dict) else getattr(source, key, None)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            return None
 
-    context = getattr(runtime, "context", None)
-    thread_id = getattr(context, "thread_id", None)
-    if isinstance(thread_id, str) and thread_id.strip():
-        return thread_id.strip()
+        thread_id = string_value("thread_id")
+        if not thread_id:
+            raise ValueError(f"thread_id is required in {error_context}")
 
-    raise ValueError("thread_id is required in runtime configurable context")
+        uid = string_value("uid")
+        if not uid:
+            raise ValueError(f"uid is required in {error_context}")
 
+        selected = getattr(readable_skills_source, "_readable_skills", [])
+        return cls(
+            thread_id=thread_id,
+            uid=uid,
+            readable_skills=normalize_string_list(selected if isinstance(selected, list) else []),
+            file_thread_id=string_value("file_thread_id") or thread_id,
+            skills_thread_id=string_value("skills_thread_id") or thread_id,
+        )
 
-def _extract_uid(runtime) -> str:
-    config = getattr(runtime, "config", None)
-    if isinstance(config, dict):
-        configurable = config.get("configurable", {})
-        if isinstance(configurable, dict):
-            uid = configurable.get("uid")
-            if isinstance(uid, str) and uid.strip():
-                return uid.strip()
-
-    context = getattr(runtime, "context", None)
-    uid = getattr(context, "uid", None)
-    if isinstance(uid, str) and uid.strip():
-        return uid.strip()
-
-    raise ValueError("uid is required in runtime configurable context")
+    def create_backend(self) -> CompositeBackend:
+        return CustomCompositeBackend(
+            default=ProvisionerSandboxBackend(
+                thread_id=self.thread_id,
+                uid=self.uid,
+                readable_skills=self.readable_skills,
+                file_thread_id=self.file_thread_id,
+                skills_thread_id=self.skills_thread_id,
+            ),
+            routes={
+                "/skills/": SelectedSkillsReadonlyBackend(selected_slugs=self.readable_skills),
+            },
+            artifacts_root=VIRTUAL_PATH_OUTPUTS,
+        )
 
 
 def create_agent_composite_backend(runtime) -> CompositeBackend:
-    readable_skills = _get_readable_skills_from_runtime(runtime)
-    thread_id = _extract_thread_id(runtime)
-    uid = _extract_uid(runtime)
-    return CustomCompositeBackend(
-        default=ProvisionerSandboxBackend(thread_id=thread_id, uid=uid, readable_skills=readable_skills),
-        routes={
-            "/skills/": SelectedSkillsReadonlyBackend(selected_slugs=readable_skills),
-        },
-        artifacts_root=VIRTUAL_PATH_OUTPUTS,
-    )
+    return _BackendScope.from_runtime(runtime).create_backend()
 
 
-def create_agent_filesystem_middleware(tool_token_limit_before_evict: int | None = None) -> FilesystemMiddleware:
+def create_agent_filesystem_middleware(
+    tool_token_limit_before_evict: int | None = None,
+    *,
+    context=None,
+) -> FilesystemMiddleware:
+    backend = create_agent_composite_backend
+    if context is not None:
+        backend = _BackendScope.from_sources(
+            context,
+            readable_skills_source=context,
+            error_context="runtime context",
+        ).create_backend()
     middleware = FilesystemMiddleware(
-        backend=create_agent_composite_backend,
+        backend=backend,
         tool_token_limit_before_evict=tool_token_limit_before_evict,
     )
     middleware._large_tool_results_prefix = VIRTUAL_PATH_LARGE_TOOL_RESULTS

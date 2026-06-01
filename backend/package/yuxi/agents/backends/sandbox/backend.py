@@ -150,17 +150,31 @@ def _looks_like_binary(content: bytes) -> bool:
 
 
 class ProvisionerSandboxBackend(BaseSandbox):
-    def __init__(self, thread_id: str, *, uid: str, readable_skills: list[str] | None = None):
+    def __init__(
+        self,
+        thread_id: str,
+        *,
+        uid: str,
+        readable_skills: list[str] | None = None,
+        file_thread_id: str | None = None,
+        skills_thread_id: str | None = None,
+    ):
         self._thread_id = str(thread_id or "").strip()
         if not self._thread_id:
             raise ValueError("thread_id is required for ProvisionerSandboxBackend")
+        self._file_thread_id = str(file_thread_id or self._thread_id).strip()
+        if not self._file_thread_id:
+            raise ValueError("file_thread_id is required for ProvisionerSandboxBackend")
+        self._skills_thread_id = str(skills_thread_id or self._thread_id).strip()
+        if not self._skills_thread_id:
+            raise ValueError("skills_thread_id is required for ProvisionerSandboxBackend")
         self._uid = str(uid or "").strip()
         if not self._uid:
             raise ValueError("uid is required for ProvisionerSandboxBackend")
 
         self._readable_skills = list(readable_skills or [])
         self._provider = get_sandbox_provider()
-        self._id = sandbox_id_for_thread(self._thread_id)
+        self._id = sandbox_id_for_thread(self._file_thread_id, self._skills_thread_id)
         self._client: Any | None = None
         self._client_url: str | None = None
         self._command_timeout_seconds = int(getattr(conf, "sandbox_exec_timeout_seconds", 180))
@@ -181,8 +195,14 @@ class ProvisionerSandboxBackend(BaseSandbox):
         return AgentSandboxClient(base_url=sandbox_url, timeout=self._command_timeout_seconds)
 
     def _get_client(self) -> Any:
-        sync_thread_readable_skills(self._thread_id, self._readable_skills)
-        connection = self._provider.get(self._thread_id, uid=self._uid, create_if_missing=True)
+        sync_thread_readable_skills(self._skills_thread_id, self._readable_skills)
+        connection = self._provider.get(
+            self._thread_id,
+            uid=self._uid,
+            create_if_missing=True,
+            file_thread_id=self._file_thread_id,
+            skills_thread_id=self._skills_thread_id,
+        )
         if connection is None:
             raise RuntimeError(f"sandbox is unavailable for thread {self._thread_id}")
 
@@ -195,9 +215,9 @@ class ProvisionerSandboxBackend(BaseSandbox):
     def _read_binary(self, path: str, offset: int = 0, limit: int | None = None) -> bytes:
         """Read file content from the sandbox file API and normalize it to bytes.
 
-        The underlying API may return base64 text, raw bytes, or plain strings.
-        This helper is the single normalization point used by read(), edit(), and
-        download_files() so all read paths share the same transport semantics.
+        The underlying API returns plain text by default and may include an
+        explicit `encoding="base64"` marker for binary payloads. This helper is
+        the single normalization point used by read(), edit(), and download_files().
         """
         start_line = max(0, int(offset))
         end_line = start_line + int(limit) if limit is not None else None
@@ -216,10 +236,10 @@ class ProvisionerSandboxBackend(BaseSandbox):
         if not isinstance(content, str):
             return str(content).encode("utf-8")
 
-        try:
+        encoding = getattr(result.data, "encoding", None)
+        if isinstance(encoding, str) and encoding.lower() == "base64":
             return base64.b64decode(content, validate=True)
-        except Exception:  # noqa: BLE001
-            return content.encode("utf-8")
+        return content.encode("utf-8")
 
     def read(
         self,
@@ -487,8 +507,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
         """Download file payloads as raw bytes from the sandbox file API.
 
-        The underlying API is read with base64 encoding and decoded back into
-        bytes by _read_binary().
+        _read_binary() normalizes the sandbox file API response to bytes.
         """
         responses: list[FileDownloadResponse] = []
         for path in paths:

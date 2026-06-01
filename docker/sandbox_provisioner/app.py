@@ -41,6 +41,8 @@ def merged_sandbox_env(global_env: dict[str, str], user_env: dict[str, str]) -> 
 class CreateSandboxRequest(BaseModel):
     sandbox_id: str
     thread_id: str
+    file_thread_id: str | None = None
+    skills_thread_id: str | None = None
     uid: str
     env: dict[str, str] = Field(default_factory=dict)
 
@@ -86,10 +88,21 @@ class MemoryProvisionerBackend:
             return template.format(sandbox_id=sandbox_id)
         return template
 
-    def create(self, sandbox_id: str, thread_id: str, uid: str, env: dict[str, str] | None = None) -> SandboxRecord:
-        _ = thread_id  # unused in memory backend
-        _ = uid  # unused in memory backend
-        _ = env  # unused in memory backend
+    def create(
+        self,
+        sandbox_id: str,
+        thread_id: str,
+        uid: str,
+        env: dict[str, str] | None = None,
+        *,
+        file_thread_id: str | None = None,
+        skills_thread_id: str | None = None,
+    ) -> SandboxRecord:
+        _ = thread_id
+        _ = file_thread_id
+        _ = skills_thread_id
+        _ = uid
+        _ = env
         with self._lock:
             existing = self._records.get(sandbox_id)
             if existing is not None:
@@ -242,8 +255,8 @@ class LocalContainerProvisionerBackend:
             raise ValueError("thread outputs path resolved outside threads host root") from exc
         return outputs
 
-    def _is_expected_skills_mount(self, container, thread_id: str) -> bool:
-        expected_source = str(self._thread_skills_host_path(thread_id))
+    def _is_expected_skills_mount(self, container, skills_thread_id: str) -> bool:
+        expected_source = str(self._thread_skills_host_path(skills_thread_id))
         for mount in container.attrs.get("Mounts") or []:
             destination = (mount.get("Destination") or "").rstrip("/")
             if destination != "/home/gem/skills":
@@ -252,11 +265,11 @@ class LocalContainerProvisionerBackend:
             return source == expected_source
         return False
 
-    def _has_expected_user_data_mounts(self, container, thread_id: str, uid: str) -> bool:
+    def _has_expected_user_data_mounts(self, container, file_thread_id: str, uid: str) -> bool:
         expected_mounts = {
             "/home/gem/user-data/workspace": str(self._shared_workspace_host_path(uid)),
-            "/home/gem/user-data/uploads": str(self._thread_uploads_host_path(thread_id)),
-            "/home/gem/user-data/outputs": str(self._thread_outputs_host_path(thread_id)),
+            "/home/gem/user-data/uploads": str(self._thread_uploads_host_path(file_thread_id)),
+            "/home/gem/user-data/outputs": str(self._thread_outputs_host_path(file_thread_id)),
         }
         actual_mounts = {
             str((mount.get("Destination") or "").rstrip("/")): str((mount.get("Source") or "").rstrip("/"))
@@ -337,18 +350,29 @@ class LocalContainerProvisionerBackend:
         except NotFound:
             return None
 
-    def create(self, sandbox_id: str, thread_id: str, uid: str, env: dict[str, str] | None = None) -> SandboxRecord:
+    def create(
+        self,
+        sandbox_id: str,
+        thread_id: str,
+        uid: str,
+        env: dict[str, str] | None = None,
+        *,
+        file_thread_id: str | None = None,
+        skills_thread_id: str | None = None,
+    ) -> SandboxRecord:
         with self._lock:
             safe_thread_id = self._validate_thread_id(thread_id)
+            safe_file_thread_id = self._validate_thread_id(file_thread_id or safe_thread_id)
+            safe_skills_thread_id = self._validate_thread_id(skills_thread_id or safe_thread_id)
             safe_uid = self._validate_uid(uid)
             existing = self._get_container(sandbox_id)
             if existing is not None:
                 existing.reload()
-                if not self._is_expected_skills_mount(existing, safe_thread_id):
+                if not self._is_expected_skills_mount(existing, safe_skills_thread_id):
                     logger.info("Recreating sandbox %s because skills mount is stale", sandbox_id)
                     self.delete(sandbox_id)
                     existing = None
-                elif not self._has_expected_user_data_mounts(existing, safe_thread_id, safe_uid):
+                elif not self._has_expected_user_data_mounts(existing, safe_file_thread_id, safe_uid):
                     logger.info("Recreating sandbox %s because user-data mounts are stale", sandbox_id)
                     self.delete(sandbox_id)
                     existing = None
@@ -373,11 +397,11 @@ class LocalContainerProvisionerBackend:
             threads_root = Path(self._threads_host_path).resolve()
             shared_workspace = self._shared_workspace_host_path(safe_uid)
             shared_workspace.mkdir(parents=True, exist_ok=True)
-            thread_uploads = self._thread_uploads_host_path(safe_thread_id)
-            thread_outputs = self._thread_outputs_host_path(safe_thread_id)
+            thread_uploads = self._thread_uploads_host_path(safe_file_thread_id)
+            thread_outputs = self._thread_outputs_host_path(safe_file_thread_id)
             thread_uploads.mkdir(parents=True, exist_ok=True)
             thread_outputs.mkdir(parents=True, exist_ok=True)
-            thread_skills = self._thread_skills_host_path(safe_thread_id)
+            thread_skills = self._thread_skills_host_path(safe_skills_thread_id)
             thread_skills.mkdir(parents=True, exist_ok=True)
 
             container_name = self._container_name(sandbox_id)
@@ -387,8 +411,10 @@ class LocalContainerProvisionerBackend:
                 "labels": {
                     "app": "yuxi-sandbox",
                     "sandbox-id": sandbox_id,
-                    "thread-id": thread_id,
-                    "uid": uid,
+                    "thread-id": safe_thread_id,
+                    "file-thread-id": safe_file_thread_id,
+                    "skills-thread-id": safe_skills_thread_id,
+                    "uid": safe_uid,
                     "managed-by": "yuxi-sandbox-provisioner",
                 },
                 "volumes": {
@@ -424,22 +450,26 @@ class LocalContainerProvisionerBackend:
         if container is None:
             return None
         container.reload()
-        thread_id = str((container.labels or {}).get("thread-id") or "").strip()
+        labels = container.labels or {}
+        thread_id = str(labels.get("thread-id") or "").strip()
         if not thread_id:
             return None
-        uid = str((container.labels or {}).get("uid") or "").strip()
+        file_thread_id = str(labels.get("file-thread-id") or thread_id).strip()
+        skills_thread_id = str(labels.get("skills-thread-id") or thread_id).strip()
+        uid = str(labels.get("uid") or "").strip()
         if not uid:
             return None
-        safe_thread_id = self._validate_thread_id(thread_id)
+        safe_file_thread_id = self._validate_thread_id(file_thread_id)
+        safe_skills_thread_id = self._validate_thread_id(skills_thread_id)
         safe_uid = self._validate_uid(uid)
-        if not self._is_expected_skills_mount(container, safe_thread_id):
+        if not self._is_expected_skills_mount(container, safe_skills_thread_id):
             logger.info("Discarding stale sandbox %s with unexpected skills mount", sandbox_id)
             try:
                 self.delete(sandbox_id)
             except Exception as exc:
                 logger.warning("Failed to delete stale sandbox %s during discover: %s", sandbox_id, exc)
             return None
-        if not self._has_expected_user_data_mounts(container, safe_thread_id, safe_uid):
+        if not self._has_expected_user_data_mounts(container, safe_file_thread_id, safe_uid):
             logger.info("Discarding stale sandbox %s with unexpected user-data mounts", sandbox_id)
             try:
                 self.delete(sandbox_id)
@@ -511,7 +541,16 @@ class KubernetesProvisionerBackend:
     def _service_name(sandbox_id: str) -> str:
         return f"sandbox-{sandbox_id}"
 
-    def _build_pod_spec(self, sandbox_id: str, thread_id: str, uid: str, env: dict[str, str]):
+    def _build_pod_spec(
+        self,
+        sandbox_id: str,
+        thread_id: str,
+        uid: str,
+        env: dict[str, str],
+        *,
+        file_thread_id: str,
+        skills_thread_id: str,
+    ):
         pod_name = self._pod_name(sandbox_id)
         env_vars = [
             self._client.V1EnvVar(name=key, value=value)
@@ -521,7 +560,12 @@ class KubernetesProvisionerBackend:
             metadata=self._client.V1ObjectMeta(
                 name=pod_name,
                 labels={"app": "yuxi-sandbox", "sandbox-id": sandbox_id},
-                annotations={"thread-id": thread_id, "uid": uid},
+                annotations={
+                    "thread-id": thread_id,
+                    "file-thread-id": file_thread_id,
+                    "skills-thread-id": skills_thread_id,
+                    "uid": uid,
+                },
             ),
             spec=self._client.V1PodSpec(
                 restart_policy="Never",
@@ -537,11 +581,11 @@ class KubernetesProvisionerBackend:
                         args=[
                             "chmod 777 /home/gem "
                             f"&& mkdir -p /mnt/shared-data/threads/shared/{uid}/workspace "
-                            f"/mnt/shared-data/threads/{thread_id}/user-data/uploads "
-                            f"/mnt/shared-data/threads/{thread_id}/user-data/outputs "
-                            f"/mnt/shared-data/threads/{thread_id}/skills "
+                            f"/mnt/shared-data/threads/{file_thread_id}/user-data/uploads "
+                            f"/mnt/shared-data/threads/{file_thread_id}/user-data/outputs "
+                            f"/mnt/shared-data/threads/{skills_thread_id}/skills "
                             f"&& chmod -R 777 /mnt/shared-data/threads/shared/{uid}/workspace "
-                            f"/mnt/shared-data/threads/{thread_id}/user-data ",
+                            f"/mnt/shared-data/threads/{file_thread_id}/user-data ",
                         ],
                         volume_mounts=[
                             self._client.V1VolumeMount(name="home-dir", mount_path="/home/gem"),
@@ -565,17 +609,17 @@ class KubernetesProvisionerBackend:
                             self._client.V1VolumeMount(
                                 name="shared-data",
                                 mount_path="/home/gem/user-data/uploads",
-                                sub_path=f"threads/{thread_id}/user-data/uploads",
+                                sub_path=f"threads/{file_thread_id}/user-data/uploads",
                             ),
                             self._client.V1VolumeMount(
                                 name="shared-data",
                                 mount_path="/home/gem/user-data/outputs",
-                                sub_path=f"threads/{thread_id}/user-data/outputs",
+                                sub_path=f"threads/{file_thread_id}/user-data/outputs",
                             ),
                             self._client.V1VolumeMount(
                                 name="shared-data",
                                 mount_path="/home/gem/skills",
-                                sub_path=f"threads/{thread_id}/skills",
+                                sub_path=f"threads/{skills_thread_id}/skills",
                                 read_only=True,
                             ),
                         ],
@@ -618,10 +662,43 @@ class KubernetesProvisionerBackend:
             ),
         )
 
-    def create(self, sandbox_id: str, thread_id: str, uid: str, env: dict[str, str] | None = None) -> SandboxRecord:
+    @staticmethod
+    def _pod_has_expected_mounts(pod, *, file_thread_id: str, skills_thread_id: str, uid: str) -> bool:
+        expected_mounts = {
+            "/home/gem/user-data/workspace": f"threads/shared/{uid}/workspace",
+            "/home/gem/user-data/uploads": f"threads/{file_thread_id}/user-data/uploads",
+            "/home/gem/user-data/outputs": f"threads/{file_thread_id}/user-data/outputs",
+            "/home/gem/skills": f"threads/{skills_thread_id}/skills",
+        }
+        for container in getattr(pod.spec, "containers", []) or []:
+            if getattr(container, "name", None) != "sandbox":
+                continue
+            actual_mounts = {
+                str(getattr(mount, "mount_path", "") or "").rstrip("/"): str(
+                    getattr(mount, "sub_path", "") or ""
+                )
+                for mount in getattr(container, "volume_mounts", []) or []
+            }
+            return all(actual_mounts.get(path) == sub_path for path, sub_path in expected_mounts.items())
+        return False
+
+    def create(
+        self,
+        sandbox_id: str,
+        thread_id: str,
+        uid: str,
+        env: dict[str, str] | None = None,
+        *,
+        file_thread_id: str | None = None,
+        skills_thread_id: str | None = None,
+    ) -> SandboxRecord:
         from kubernetes.client.rest import ApiException
 
         with self._lock:
+            safe_thread_id = LocalContainerProvisionerBackend._validate_thread_id(thread_id)
+            safe_file_thread_id = LocalContainerProvisionerBackend._validate_thread_id(file_thread_id or safe_thread_id)
+            safe_skills_thread_id = LocalContainerProvisionerBackend._validate_thread_id(skills_thread_id or safe_thread_id)
+            safe_uid = LocalContainerProvisionerBackend._validate_uid(uid)
             discovered = self.discover(sandbox_id)
             if discovered is not None:
                 return discovered
@@ -632,7 +709,14 @@ class KubernetesProvisionerBackend:
             try:
                 self._core_api.create_namespaced_pod(
                     namespace=self._namespace,
-                    body=self._build_pod_spec(sandbox_id, thread_id, uid, env or {}),
+                    body=self._build_pod_spec(
+                        sandbox_id,
+                        safe_thread_id,
+                        safe_uid,
+                        env or {},
+                        file_thread_id=safe_file_thread_id,
+                        skills_thread_id=safe_skills_thread_id,
+                    ),
                 )
             except ApiException as exc:
                 if exc.status != 409:
@@ -671,6 +755,31 @@ class KubernetesProvisionerBackend:
             if exc.status == 404:
                 return None
             raise
+
+        annotations = pod.metadata.annotations or {}
+        thread_id = str(annotations.get("thread-id") or "").strip()
+        if not thread_id:
+            return None
+        file_thread_id = str(annotations.get("file-thread-id") or thread_id).strip()
+        skills_thread_id = str(annotations.get("skills-thread-id") or thread_id).strip()
+        uid = str(annotations.get("uid") or "").strip()
+        if not uid:
+            return None
+        safe_file_thread_id = LocalContainerProvisionerBackend._validate_thread_id(file_thread_id)
+        safe_skills_thread_id = LocalContainerProvisionerBackend._validate_thread_id(skills_thread_id)
+        safe_uid = LocalContainerProvisionerBackend._validate_uid(uid)
+        if not self._pod_has_expected_mounts(
+            pod,
+            file_thread_id=safe_file_thread_id,
+            skills_thread_id=safe_skills_thread_id,
+            uid=safe_uid,
+        ):
+            logger.info("Discarding stale sandbox %s with unexpected pod mounts", sandbox_id)
+            try:
+                self.delete(sandbox_id)
+            except Exception as exc:
+                logger.warning("Failed to delete stale sandbox %s during discover: %s", sandbox_id, exc)
+            return None
 
         node_port = None
         if service.spec and service.spec.ports:
@@ -843,7 +952,14 @@ def health():
 def create_sandbox(payload: CreateSandboxRequest):
     try:
         # Backend.create() already handles container reuse (discovers existing container first)
-        record = backend_impl.create(payload.sandbox_id, payload.thread_id, payload.uid, payload.env)
+        record = backend_impl.create(
+            payload.sandbox_id,
+            payload.thread_id,
+            payload.uid,
+            payload.env,
+            file_thread_id=payload.file_thread_id,
+            skills_thread_id=payload.skills_thread_id,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
