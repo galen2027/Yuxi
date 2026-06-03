@@ -179,8 +179,8 @@ class BaseContext:
         metadata={
             "name": "Skills",
             "options": [],
-            "description": "可选技能列表（由超级管理员维护），默认选择当前用户可用的全部 skills。"
-            "技能依赖的工具和 MCP 服务器也会被自动挂载。",
+            "description": "可选 Skill 拓展列表，默认选择当前用户可用的全部 Skill 拓展。"
+            "Skill 拓展依赖的工具和 MCP 服务器也会被自动挂载。",
             "type": "list",
             "kind": "skills",
         },
