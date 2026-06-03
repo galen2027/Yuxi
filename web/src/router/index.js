@@ -101,8 +101,7 @@ const router = createRouter({
           component: () => import('../views/ExtensionsView.vue'),
           meta: {
             keepAlive: false,
-            requiresAuth: true,
-            requiresAdmin: true
+            requiresAuth: true
           },
           children: [
             {
@@ -131,8 +130,7 @@ const router = createRouter({
               component: () => import('../components/extensions/SkillDetailView.vue'),
               meta: {
                 keepAlive: false,
-                requiresAuth: true,
-                requiresAdmin: true
+                requiresAuth: true
               }
             }
           ]
@@ -142,7 +140,7 @@ const router = createRouter({
     {
       path: '/skills',
       name: 'skills',
-      redirect: '/extensions'
+      redirect: '/extensions?tab=skills'
     },
     {
       path: '/:pathMatch(.*)*',

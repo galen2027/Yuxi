@@ -30,7 +30,7 @@
         <InfoCard
           v-for="server in filteredEnabledServers"
           :key="server.name"
-          :title="server.name"
+          :title="formatExtensionCardTitle(server.name)"
           :subtitle="server.transport"
           :description="server.description || '暂无描述'"
           :tags="mcpTags(server)"
@@ -48,7 +48,7 @@
         <InfoCard
           v-for="server in filteredDisabledServers"
           :key="server.name"
-          :title="server.name"
+          :title="formatExtensionCardTitle(server.name)"
           :subtitle="server.transport"
           :description="server.description || '暂无描述'"
           :tags="mcpTags(server)"
@@ -81,6 +81,7 @@ import ExtensionCardGrid from './ExtensionCardGrid.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
 import PageShoulder from '@/components/shared/PageShoulder.vue'
 import McpFormModal from './McpFormModal.vue'
+import { formatExtensionCardTitle } from '@/utils/extensionDisplayName'
 
 const router = useRouter()
 

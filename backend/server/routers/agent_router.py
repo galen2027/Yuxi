@@ -136,7 +136,7 @@ async def get_default_agent(current_user: User = Depends(get_required_user), db:
 
 @agent_router.post("")
 async def create_agent(
-    payload: AgentCreate, current_user: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)
+    payload: AgentCreate, current_user: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)
 ):
     if not agent_manager.get_agent(payload.backend_id):
         raise HTTPException(status_code=404, detail=f"智能体后端 {payload.backend_id} 不存在")

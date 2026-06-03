@@ -76,7 +76,7 @@
     </div>
 
     <template v-else>
-      <ExtensionCardGrid>
+      <ExtensionCardGrid :min-width="360">
         <div
           v-for="skill in filteredInstalledSkills"
           :key="skill.slug"
@@ -87,24 +87,110 @@
           }"
         >
           <a-checkbox
-            v-if="isBatchDeleteMode && skill.sourceType !== 'builtin'"
+            v-if="isBatchDeleteMode && canManageSkill(skill) && skill.sourceType !== 'builtin'"
             :checked="selectedCardSlugs.includes(skill.slug)"
             @change="handleToggleCardSelect(skill.slug)"
             class="card-select-checkbox"
           />
           <InfoCard
-            :title="skill.name"
+            variant="mini"
+            :title="formatExtensionCardTitle(skill.name)"
             :description="skill.description || '暂无描述'"
             :default-icon="BookMarkedIcon"
-            :tags="skillTags(skill)"
-            :status="skill.status"
             @click="handleCardClick(skill)"
             :class="{ 'card-clickable-select': isBatchDeleteMode }"
           >
+            <template #action>
+              <button
+                type="button"
+                class="skill-enabled-action"
+                :class="{ enabled: skill.enabled !== false }"
+                :disabled="!canManageSkill(skill) || isSkillToggling(skill.slug)"
+                :aria-label="skill.enabled === false ? '启用 Skill' : '禁用 Skill'"
+                @click.stop="handleToggleSkillEnabled(skill)"
+              >
+                <Plus v-if="skill.enabled === false" :size="15" class="action-icon" />
+                <template v-else>
+                  <Check :size="15" class="action-icon action-icon-check" />
+                  <Minus :size="15" class="action-icon action-icon-minus" />
+                </template>
+              </button>
+            </template>
           </InfoCard>
         </div>
       </ExtensionCardGrid>
     </template>
+
+    <a-modal
+      v-model:open="skillPreviewVisible"
+      class="skill-preview-modal"
+      :footer="null"
+      width="680px"
+      :closable="false"
+      :destroy-on-close="true"
+      @cancel="closeSkillPreview"
+    >
+      <div v-if="previewSkill" class="skill-preview-panel">
+        <div class="skill-preview-header">
+          <div class="skill-preview-title-area">
+            <div class="skill-preview-icon">
+              <BookMarked :size="18" />
+            </div>
+            <div class="skill-preview-title-text">
+              <div class="skill-preview-title">
+                {{ formatExtensionCardTitle(previewSkill.name) }}
+              </div>
+              <div class="skill-preview-meta">
+                <span>{{ sourceTypeLabel(previewSkill.sourceType || previewSkill.source_type) }} Skill</span>
+                <span v-if="previewSkill.enabled === false" class="skill-preview-disabled-tag">
+                  已禁用
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="skill-preview-actions">
+            <a-switch
+              :checked="previewSkill.enabled !== false"
+              :disabled="!canManageSkill(previewSkill) || isSkillToggling(previewSkill.slug)"
+              :loading="isSkillToggling(previewSkill.slug)"
+              size="small"
+              @change="handlePreviewToggle"
+            />
+          </div>
+        </div>
+
+        <div class="skill-preview-body">
+          <div v-if="skillPreviewLoading" class="skill-preview-loading">
+            <a-spin />
+          </div>
+          <MarkdownPreview
+            v-else-if="skillPreviewMarkdown"
+            :content="skillPreviewMarkdown"
+            :compact="true"
+          />
+          <a-empty v-else :description="skillPreviewError || '未读取到 SKILL.md'" />
+        </div>
+
+        <div class="skill-preview-footer">
+          <div class="skill-preview-footer-left">
+            <a-button
+              v-if="canDeletePreviewSkill"
+              danger
+              :loading="deletingPreviewSkill"
+              @click="confirmDeletePreviewSkill"
+            >
+              卸载
+            </a-button>
+          </div>
+          <div class="skill-preview-footer-right">
+            <a-button @click="closeSkillPreview">关闭</a-button>
+            <a-button type="primary" class="lucide-icon-btn" @click="goToPreviewSkillManagement">
+              <span>去管理</span>
+            </a-button>
+          </div>
+        </div>
+      </div>
+    </a-modal>
 
     <a-modal
       v-model:open="remoteInstallModalVisible"
@@ -439,12 +525,14 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
-import { RefreshCw, Upload, Computer, BookMarked, History, Trash2 } from 'lucide-vue-next'
+import { RefreshCw, Upload, Computer, BookMarked, History, Trash2, Check, Plus, Minus } from 'lucide-vue-next'
 import { skillApi } from '@/apis/skill_api'
 import ExtensionCardGrid from './ExtensionCardGrid.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
 import PageShoulder from '@/components/shared/PageShoulder.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import { formatExtensionCardTitle } from '@/utils/extensionDisplayName'
 
 const BookMarkedIcon = BookMarked
 
@@ -458,8 +546,16 @@ const searchQuery = ref('')
 
 const isBatchDeleteMode = ref(false)
 const selectedCardSlugs = ref([])
+const togglingSkillSlugs = ref([])
 
 const skills = ref([])
+const skillPreviewVisible = ref(false)
+const previewSkill = ref(null)
+const skillPreviewMarkdown = ref('')
+const skillPreviewLoading = ref(false)
+const skillPreviewError = ref('')
+const deletingPreviewSkill = ref(false)
+let previewRequestSeq = 0
 
 const remoteInstallModalVisible = ref(false)
 const activeTab = ref('repo') // 'repo' 或 'search'
@@ -492,23 +588,20 @@ const matchesSearch = (skill) => {
 }
 
 const installedSkillCards = computed(() =>
-  (skills.value || []).map((skill) => {
-    const sourceType = skill.source_type || 'upload'
-    return {
-      ...skill,
-      sourceType,
-      sourceLabel: sourceTypeLabel(sourceType),
-      status:
-        skill.enabled === false
-          ? { label: '已禁用', level: 'default' }
-          : { label: '已启用', level: 'success' }
-    }
-  })
+  (skills.value || []).map((skill) => ({
+    ...skill,
+    sourceType: skill.source_type || 'upload'
+  }))
 )
 
 const filteredInstalledSkills = computed(() => installedSkillCards.value.filter(matchesSearch))
 const filteredDeletableSkills = computed(() =>
-  filteredInstalledSkills.value.filter((skill) => skill.sourceType !== 'builtin')
+  filteredInstalledSkills.value.filter(
+    (skill) => canManageSkill(skill) && skill.sourceType !== 'builtin'
+  )
+)
+const canDeletePreviewSkill = computed(
+  () => !!previewSkill.value && canManageSkill(previewSkill.value) && previewSkill.value.sourceType !== 'builtin'
 )
 
 // 仓库拉取的技能列表过滤
@@ -590,26 +683,54 @@ const sourceTypeLabel = (sourceType) => {
   return '上传'
 }
 
-const skillTags = (skill) => {
-  if (skill.sourceType === 'builtin') return [{ name: skill.sourceLabel || '内置' }]
-  return [{ name: skill.sourceLabel || '外部', color: 'blue' }]
-}
+const canManageSkill = (skill) => skill?.can_manage !== false
+const isSkillToggling = (slug) => togglingSkillSlugs.value.includes(slug)
 
 const navigateToDetail = (skill) => {
   router.push({ path: `/extensions/skill/${encodeURIComponent(skill.slug)}` })
+}
+
+const closeSkillPreview = () => {
+  skillPreviewVisible.value = false
+}
+
+const openSkillPreview = async (skill) => {
+  if (!skill?.slug) return
+  const requestSeq = ++previewRequestSeq
+  previewSkill.value = skill
+  skillPreviewMarkdown.value = ''
+  skillPreviewError.value = ''
+  skillPreviewLoading.value = true
+  skillPreviewVisible.value = true
+  try {
+    const result = await skillApi.getSkillFile(skill.slug, 'SKILL.md')
+    if (requestSeq !== previewRequestSeq || previewSkill.value?.slug !== skill.slug) return
+    skillPreviewMarkdown.value = result?.data?.content || ''
+  } catch (error) {
+    if (requestSeq !== previewRequestSeq || previewSkill.value?.slug !== skill.slug) return
+    skillPreviewError.value = error?.response?.data?.detail || error.message || '读取 SKILL.md 失败'
+  } finally {
+    if (requestSeq === previewRequestSeq) skillPreviewLoading.value = false
+  }
+}
+
+const goToPreviewSkillManagement = () => {
+  if (!previewSkill.value) return
+  navigateToDetail(previewSkill.value)
+  closeSkillPreview()
 }
 
 const handleCardClick = (skill) => {
   if (isBatchDeleteMode.value) {
     handleToggleCardSelect(skill.slug)
   } else {
-    navigateToDetail(skill)
+    openSkillPreview(skill)
   }
 }
 
 const handleToggleCardSelect = (slug) => {
   const target = installedSkillCards.value.find((skill) => skill.slug === slug)
-  if (target?.sourceType === 'builtin') return
+  if (!canManageSkill(target) || target?.sourceType === 'builtin') return
   const idx = selectedCardSlugs.value.indexOf(slug)
   if (idx > -1) {
     selectedCardSlugs.value.splice(idx, 1)
@@ -618,9 +739,67 @@ const handleToggleCardSelect = (slug) => {
   }
 }
 
+const handleToggleSkillEnabled = async (skill) => {
+  if (!skill || !canManageSkill(skill) || isSkillToggling(skill.slug)) return
+  const enabled = skill.enabled === false
+  togglingSkillSlugs.value.push(skill.slug)
+  try {
+    const result = await skillApi.updateSkillEnabled(skill.slug, enabled)
+    const updatedSkill = result?.data
+    const index = skills.value.findIndex((item) => item.slug === skill.slug)
+    if (updatedSkill && index > -1) {
+      skills.value[index] = updatedSkill
+    } else {
+      await fetchSkills()
+    }
+    if (previewSkill.value?.slug === skill.slug) {
+      previewSkill.value = updatedSkill
+        ? { ...updatedSkill, sourceType: updatedSkill.source_type || 'upload' }
+        : { ...previewSkill.value, enabled }
+    }
+    message.success(`Skill 已${enabled ? '启用' : '禁用'}`)
+  } catch (error) {
+    message.error(error?.response?.data?.detail || error.message || '更新 Skill 启用状态失败')
+  } finally {
+    togglingSkillSlugs.value = togglingSkillSlugs.value.filter((slug) => slug !== skill.slug)
+  }
+}
+
+const handlePreviewToggle = () => {
+  if (!previewSkill.value) return
+  handleToggleSkillEnabled(previewSkill.value)
+}
+
+const confirmDeletePreviewSkill = () => {
+  const target = previewSkill.value
+  if (!target || !canDeletePreviewSkill.value || deletingPreviewSkill.value) return
+
+  Modal.confirm({
+    title: `卸载 ${target.name || target.slug}`,
+    content: '卸载后会删除该 Skill 的数据库记录和本地文件，操作不可恢复。',
+    okText: '卸载',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      deletingPreviewSkill.value = true
+      try {
+        await skillApi.deleteSkill(target.slug)
+        message.success('Skill 已卸载')
+        closeSkillPreview()
+        previewSkill.value = null
+        await fetchSkills()
+      } catch (error) {
+        message.error(error?.response?.data?.detail || error.message || '卸载 Skill 失败')
+      } finally {
+        deletingPreviewSkill.value = false
+      }
+    }
+  })
+}
+
 const handleBatchSelectAll = () => {
   selectedCardSlugs.value = filteredInstalledSkills.value
-    .filter((skill) => skill.sourceType !== 'builtin')
+    .filter((skill) => canManageSkill(skill) && skill.sourceType !== 'builtin')
     .map((skill) => skill.slug)
 }
 
@@ -632,7 +811,7 @@ const handleBatchSelectInvert = () => {
   const currentSet = new Set(selectedCardSlugs.value)
   const nextSelected = []
   filteredInstalledSkills.value.forEach((skill) => {
-    if (skill.sourceType !== 'builtin' && !currentSet.has(skill.slug)) {
+    if (canManageSkill(skill) && skill.sourceType !== 'builtin' && !currentSet.has(skill.slug)) {
       nextSelected.push(skill.slug)
     }
   })
@@ -647,7 +826,7 @@ const exitBatchDeleteMode = () => {
 const handleBatchDelete = () => {
   const deletableSlugs = selectedCardSlugs.value.filter((slug) => {
     const target = installedSkillCards.value.find((skill) => skill.slug === slug)
-    return target?.sourceType !== 'builtin'
+    return canManageSkill(target) && target?.sourceType !== 'builtin'
   })
   if (deletableSlugs.length === 0) return
 
@@ -1034,10 +1213,15 @@ defineExpose({
       }
     }
 
-    :deep(.info-card-status) {
+    :deep(.info-card-status),
+    :deep(.info-card-mini-action) {
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.2s ease;
+    }
+
+    :deep(.info-card-mini .info-card-info) {
+      padding-right: 28px;
     }
   }
 
@@ -1054,6 +1238,179 @@ defineExpose({
     right: 16px;
     z-index: 10;
   }
+}
+
+.skill-enabled-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--gray-150);
+  border-radius: 8px;
+  background: var(--gray-0);
+  color: var(--main-color);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
+
+  &:hover,
+  &:focus {
+    outline: none;
+    border-color: var(--main-200);
+    background: var(--main-50);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  &.enabled {
+    color: var(--color-success-700);
+
+    .action-icon-minus {
+      display: none;
+    }
+
+    &:hover,
+    &:focus {
+      border-color: var(--color-error-200, #ffccc7);
+      background: var(--color-error-50, #fff2f0);
+      color: var(--color-error-700, #cf1322);
+
+      .action-icon-check {
+        display: none;
+      }
+
+      .action-icon-minus {
+        display: block;
+      }
+    }
+  }
+}
+
+.action-icon {
+  flex-shrink: 0;
+}
+
+.skill-preview-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.skill-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.skill-preview-title-area {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.skill-preview-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--main-50);
+  color: var(--main-color);
+}
+
+.skill-preview-title-text {
+  min-width: 0;
+}
+
+.skill-preview-title {
+  overflow: hidden;
+  color: var(--gray-900);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-preview-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.skill-preview-disabled-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--gray-100);
+  color: var(--gray-600);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.skill-preview-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.skill-preview-body {
+  min-height: 260px;
+  max-height: min(56vh, 520px);
+  padding: 14px 16px;
+  overflow-y: auto;
+  border: 1px solid var(--gray-150);
+  border-radius: 12px;
+  background: var(--gray-25);
+
+  :deep(.yk-markdown-preview) {
+    background: transparent;
+  }
+}
+
+.skill-preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+}
+
+.skill-preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.skill-preview-footer-left,
+.skill-preview-footer-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .skill-draft-confirm-panel {

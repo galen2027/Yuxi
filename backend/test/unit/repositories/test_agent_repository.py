@@ -5,7 +5,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from yuxi.repositories.agent_repository import AgentRepository, DEFAULT_AGENT_DESCRIPTION, DEFAULT_SHARE_CONFIG
+from yuxi.repositories.agent_repository import (
+    AgentRepository,
+    DEFAULT_AGENT_DESCRIPTION,
+    DEFAULT_SHARE_CONFIG,
+    user_can_access_agent,
+    user_can_manage_agent,
+)
+from yuxi.storage.postgres.models_business import Agent, User
 
 
 class FakeDb:
@@ -60,3 +67,41 @@ async def test_ensure_default_agent_backfills_missing_description(monkeypatch):
     assert agent.updated_by == "admin"
     db.commit.assert_awaited_once()
     db.refresh.assert_awaited_once_with(agent)
+
+
+@pytest.mark.asyncio
+async def test_create_agent_for_normal_user_forces_private_share(monkeypatch):
+    db = FakeDb()
+    repo = AgentRepository(db)
+
+    async def fake_unique_slug(_slug, _name):
+        return "personal-bot"
+
+    monkeypatch.setattr(repo, "_unique_slug", fake_unique_slug)
+
+    creator = User(username="user", uid="user", password_hash="x", role="user", department_id=1)
+    agent = await repo.create(
+        name="Personal Bot",
+        backend_id="ChatbotAgent",
+        slug="personal-bot",
+        share_config={"access_level": "global", "department_ids": [], "user_uids": []},
+        created_by="user",
+        creator=creator,
+    )
+
+    assert agent.share_config == {"access_level": "user", "department_ids": [], "user_uids": ["user"]}
+    assert db.added is agent
+
+
+def test_shared_agent_is_accessible_but_not_manageable_for_normal_user():
+    user = User(username="user", uid="user", password_hash="x", role="user", department_id=1)
+    agent = Agent(
+        slug="shared-bot",
+        name="Shared Bot",
+        backend_id="ChatbotAgent",
+        created_by="other",
+        share_config={"access_level": "user", "department_ids": [], "user_uids": ["user"]},
+    )
+
+    assert user_can_access_agent(user, agent) is True
+    assert user_can_manage_agent(user, agent) is False

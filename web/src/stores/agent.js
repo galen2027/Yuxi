@@ -87,7 +87,7 @@ export const useAgentStore = defineStore(
         const [dbsRes, mcpsRes, skillsRes] = await Promise.all([
           databaseApi.getAccessibleDatabases().catch(() => ({ databases: [] })),
           mcpApi.getMcpServers().catch(() => ({ data: [] })),
-          skillApi.listSkills().catch(() => ({ data: [] }))
+          skillApi.listAccessibleSkills().catch(() => ({ data: [] }))
         ])
         availableKnowledgeBases.value = dbsRes.databases || []
         availableMcps.value = mcpsRes.data || []

@@ -404,6 +404,19 @@ async def list_manageable_skills(db: AsyncSession, user: User) -> list[Skill]:
     return [item for item in await repo.list_all() if user_can_manage_skill(user, item)]
 
 
+async def list_visible_skills_for_management(db: AsyncSession, user: User) -> list[Skill]:
+    repo = SkillRepository(db)
+    visible: list[Skill] = []
+    seen: set[str] = set()
+    for item in await repo.list_all():
+        if item.slug in seen:
+            continue
+        if user_can_manage_skill(user, item) or (item.enabled and user_can_access_skill(user, item)):
+            visible.append(item)
+            seen.add(item.slug)
+    return visible
+
+
 async def list_skills(db: AsyncSession) -> list[Skill]:
     repo = SkillRepository(db)
     return await repo.list_all()
@@ -1015,6 +1028,13 @@ async def get_skill_or_raise(db: AsyncSession, slug: str) -> Skill:
 async def get_accessible_skill_or_raise(db: AsyncSession, user: User, slug: str) -> Skill:
     item = await get_skill_or_raise(db, slug)
     if not user_can_access_skill(user, item):
+        raise ValueError(f"技能 '{slug}' 不存在或无权访问")
+    return item
+
+
+async def get_management_readable_skill_or_raise(db: AsyncSession, user: User, slug: str) -> Skill:
+    item = await get_skill_or_raise(db, slug)
+    if not user_can_manage_skill(user, item) and not user_can_access_skill(user, item):
         raise ValueError(f"技能 '{slug}' 不存在或无权访问")
     return item
 

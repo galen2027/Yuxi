@@ -20,7 +20,7 @@
       <div class="detail-actions">
         <a-space :size="8">
           <button
-            v-if="isInstalledSkill"
+            v-if="isInstalledSkill && canManageCurrentSkill"
             type="button"
             @click="handleExport"
             class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
@@ -29,7 +29,7 @@
             <span>导出</span>
           </button>
           <button
-            v-if="isInstalledSkill && !isBuiltinInstalledSkill"
+            v-if="isInstalledSkill && canManageCurrentSkill && !isBuiltinInstalledSkill"
             type="button"
             @click="confirmDeleteSkill"
             class="lucide-icon-btn extension-panel-action extension-panel-action-danger"
@@ -43,6 +43,9 @@
 
     <div class="detail-content-wrapper">
       <div v-if="currentSkill" class="detail-content-inner">
+        <div v-if="isReadOnlySkill" class="readonly-scope-hint readonly-detail-hint">
+          你可以查看并使用此 Skill，但没有管理权限。
+        </div>
         <a-tabs v-if="isInstalledSkill" v-model:activeKey="activeTab" class="minimal-tabs">
           <a-tab-pane key="editor">
             <template #tab>
@@ -53,10 +56,10 @@
                 <div class="tree-header">
                   <span class="label">项目结构</span>
                   <div class="tree-actions">
-                    <a-tooltip v-if="!isBuiltinInstalledSkill" title="新建文件"
+                    <a-tooltip v-if="canEditSkillFiles" title="新建文件"
                       ><button @click="openCreateModal(false)"><FilePlus :size="14" /></button
                     ></a-tooltip>
-                    <a-tooltip v-if="!isBuiltinInstalledSkill" title="新建目录"
+                    <a-tooltip v-if="canEditSkillFiles" title="新建目录"
                       ><button @click="openCreateModal(true)"><FolderPlus :size="14" /></button
                     ></a-tooltip>
                     <a-tooltip title="刷新"
@@ -86,7 +89,7 @@
                       :file-path="selectedPath"
                       :show-download="false"
                       :show-fullscreen="true"
-                      :editable="!isBuiltinInstalledSkill"
+                      :editable="canEditSkillFiles"
                       :edit-all-text="true"
                       :saving="savingFile"
                       :full-height="true"
@@ -111,6 +114,7 @@
                   <p>控制此 Skill 是否可用，以及哪些用户可以选择和运行它。</p>
                 </div>
                 <a-button
+                  v-if="canManageCurrentSkill"
                   type="primary"
                   :loading="savingShareConfig"
                   @click="saveShareConfig"
@@ -132,7 +136,7 @@
                     <span class="status-pill" :class="enabledForm ? 'enabled' : 'disabled'">
                       {{ enabledForm ? '已启用' : '已禁用' }}
                     </span>
-                    <a-switch v-model:checked="enabledForm" />
+                    <a-switch v-model:checked="enabledForm" :disabled="!canManageCurrentSkill" />
                   </div>
                 </section>
 
@@ -145,6 +149,9 @@
                   </div>
                   <div v-if="isBuiltinInstalledSkill" class="readonly-scope-hint">
                     内置 Skill 固定为全局生效范围，可通过启用状态控制是否参与运行时。
+                  </div>
+                  <div v-else-if="isReadOnlySkill" class="readonly-scope-hint">
+                    当前 Skill 对你只读，不能修改生效范围。
                   </div>
                   <ShareConfigForm
                     v-else
@@ -169,7 +176,7 @@
                   <p>配置此 Skill 所需的工具、MCP 及其他 Skill 依赖。</p>
                 </div>
                 <a-button
-                  v-if="!isBuiltinInstalledSkill"
+                  v-if="canEditSkillDependencies"
                   type="primary"
                   :loading="savingDependencies"
                   @click="saveDependencies"
@@ -184,7 +191,7 @@
                   v-for="group in dependencyGroups"
                   :key="group.key"
                   class="dependency-card"
-                  :class="{ readonly: isBuiltinInstalledSkill }"
+                  :class="{ readonly: !canEditSkillDependencies }"
                 >
                   <div class="dependency-card-header">
                     <div class="dependency-title-block">
@@ -197,7 +204,7 @@
                       <p>{{ group.description }}</p>
                     </div>
                     <a-dropdown
-                      v-if="!isBuiltinInstalledSkill"
+                      v-if="canEditSkillDependencies"
                       :trigger="['click']"
                       placement="bottomRight"
                       overlay-class-name="dependency-selection-popover"
@@ -275,9 +282,9 @@
                         </div>
                       </template>
                     </a-dropdown>
-                    <a-button v-else size="small" disabled class="dependency-action-btn"
-                      >系统维护</a-button
-                    >
+                    <a-button v-else size="small" disabled class="dependency-action-btn">
+                      {{ isBuiltinInstalledSkill ? '系统维护' : '只读' }}
+                    </a-button>
                   </div>
 
                   <div v-if="getDependencyValues(group).length" class="dependency-chip-list">
@@ -289,7 +296,7 @@
                     >
                       <span>{{ getDependencyOptionLabel(group, value) }}</span>
                       <button
-                        v-if="!isBuiltinInstalledSkill"
+                        v-if="canEditSkillDependencies"
                         type="button"
                         class="dependency-chip-remove"
                         :aria-label="`移除 ${getDependencyOptionLabel(group, value)}`"
@@ -393,6 +400,12 @@ const isInstalledSkill = computed(() => !!currentSkill.value?.dir_path)
 const isBuiltinInstalledSkill = computed(() => {
   return !!(isInstalledSkill.value && currentSkill.value?.source_type === 'builtin')
 })
+const canManageCurrentSkill = computed(() => currentSkill.value?.can_manage !== false)
+const isReadOnlySkill = computed(() => isInstalledSkill.value && !canManageCurrentSkill.value)
+const canEditSkillFiles = computed(() => canManageCurrentSkill.value && !isBuiltinInstalledSkill.value)
+const canEditSkillDependencies = computed(
+  () => canManageCurrentSkill.value && !isBuiltinInstalledSkill.value
+)
 
 const sourceTypeLabel = (sourceType) => {
   if (sourceType === 'builtin') return '内置'
@@ -484,7 +497,7 @@ const getFilteredDependencyOptions = (group) => {
 const isDependencySelected = (group, value) => getDependencyValues(group).includes(value)
 
 const toggleDependency = (group, value, checked) => {
-  if (isBuiltinInstalledSkill.value) return
+  if (!canEditSkillDependencies.value) return
   const values = getDependencyValues(group)
   if (checked) {
     if (!values.includes(value)) dependencyForm[group.formKey] = [...values, value]
@@ -627,12 +640,7 @@ const handleTreeSelect = async (keys, info) => {
 }
 
 const saveCurrentFile = async (content = fileContent.value) => {
-  if (
-    !currentSkill.value ||
-    !selectedPath.value ||
-    selectedIsDir.value ||
-    isBuiltinInstalledSkill.value
-  )
+  if (!currentSkill.value || !selectedPath.value || selectedIsDir.value || !canEditSkillFiles.value)
     return
   savingFile.value = true
   try {
@@ -652,7 +660,7 @@ const saveCurrentFile = async (content = fileContent.value) => {
 
 const confirmDeleteSkill = () => {
   const target = currentSkill.value
-  if (!target) return
+  if (!target || !canManageCurrentSkill.value || isBuiltinInstalledSkill.value) return
   const actionText = '删除'
   Modal.confirm({
     title: `确认${actionText}技能「${target.slug}」？`,
@@ -673,7 +681,7 @@ const confirmDeleteSkill = () => {
 }
 
 const handleExport = async () => {
-  if (!currentSkill.value || !isInstalledSkill.value) return
+  if (!currentSkill.value || !isInstalledSkill.value || !canManageCurrentSkill.value) return
   try {
     const response = await skillApi.exportSkill(currentSkill.value.slug)
     const blob = await response.blob()
@@ -689,7 +697,7 @@ const handleExport = async () => {
 }
 
 const openCreateModal = (isDir) => {
-  if (!currentSkill.value) return
+  if (!currentSkill.value || !canEditSkillFiles.value) return
   createForm.path = ''
   createForm.content = ''
   createForm.isDir = isDir
@@ -697,7 +705,7 @@ const openCreateModal = (isDir) => {
 }
 
 const handleCreateNode = async () => {
-  if (!currentSkill.value || !createForm.path.trim() || isBuiltinInstalledSkill.value) return
+  if (!currentSkill.value || !createForm.path.trim() || !canEditSkillFiles.value) return
   creatingNode.value = true
   try {
     await skillApi.createSkillFile(currentSkill.value.slug, {
@@ -716,7 +724,7 @@ const handleCreateNode = async () => {
 }
 
 const saveShareConfig = async () => {
-  if (!currentSkill.value || !isInstalledSkill.value) return
+  if (!currentSkill.value || !isInstalledSkill.value || !canManageCurrentSkill.value) return
   if (!isBuiltinInstalledSkill.value) {
     const validation = shareConfigFormRef.value?.validate?.()
     if (validation && !validation.valid) {
@@ -744,7 +752,7 @@ const saveShareConfig = async () => {
 }
 
 const saveDependencies = async () => {
-  if (!currentSkill.value || !isInstalledSkill.value || isBuiltinInstalledSkill.value) return
+  if (!currentSkill.value || !isInstalledSkill.value || !canEditSkillDependencies.value) return
   savingDependencies.value = true
   try {
     const result = await skillApi.updateSkillDependencies(currentSkill.value.slug, {

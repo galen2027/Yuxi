@@ -25,6 +25,212 @@ def _user(uid: str = "root", role: str = "admin") -> User:
     return User(username=uid, uid=uid, password_hash="x", role=role, department_id=1)
 
 
+def test_allowed_skill_access_levels_by_role():
+    assert svc.get_allowed_skill_access_levels(_user(role="user")) == ["user"]
+    assert svc.get_allowed_skill_access_levels(_user(role="admin")) == ["global", "department", "user"]
+    assert svc.get_allowed_skill_access_levels(_user(role="superadmin")) == ["global", "department", "user"]
+
+
+@pytest.mark.asyncio
+async def test_list_visible_skills_for_management_includes_owned_disabled_and_enabled_shared(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    items = [
+        Skill(slug="owned-disabled", name="owned-disabled", description="", created_by="root", enabled=False),
+        Skill(
+            slug="shared-enabled",
+            name="shared-enabled",
+            description="",
+            created_by="other",
+            enabled=True,
+            share_config={"access_level": "user", "department_ids": [], "user_uids": ["root"]},
+        ),
+        Skill(
+            slug="shared-disabled",
+            name="shared-disabled",
+            description="",
+            created_by="other",
+            enabled=False,
+            share_config={"access_level": "user", "department_ids": [], "user_uids": ["root"]},
+        ),
+        Skill(slug="unrelated", name="unrelated", description="", created_by="other", enabled=True),
+    ]
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def list_all(self):
+            return items
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    visible = await svc.list_visible_skills_for_management(None, _user("root", role="user"))
+
+    assert [item.slug for item in visible] == ["owned-disabled", "shared-enabled"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "skill,operator",
+    [
+        (Skill(slug="owned-disabled", name="owned-disabled", description="", created_by="root", enabled=False), _user("root", role="user")),
+        (Skill(slug="admin-disabled", name="admin-disabled", description="", created_by="other", enabled=False), _user("root", role="admin")),
+        (
+            Skill(
+                slug="shared-enabled",
+                name="shared-enabled",
+                description="",
+                created_by="other",
+                enabled=True,
+                share_config={"access_level": "user", "department_ids": [], "user_uids": ["root"]},
+            ),
+            _user("root", role="user"),
+        ),
+    ],
+)
+async def test_management_readable_skill_allows_manageable_disabled_and_enabled_shared(
+    monkeypatch: pytest.MonkeyPatch,
+    skill: Skill,
+    operator: User,
+):
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_slug(self, slug: str):
+            assert slug == skill.slug
+            return skill
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    result = await svc.get_management_readable_skill_or_raise(None, operator, skill.slug)
+
+    assert result is skill
+
+
+@pytest.mark.asyncio
+async def test_management_readable_skill_rejects_disabled_shared_readonly(monkeypatch: pytest.MonkeyPatch):
+    skill = Skill(
+        slug="shared-disabled",
+        name="shared-disabled",
+        description="",
+        created_by="other",
+        enabled=False,
+        share_config={"access_level": "user", "department_ids": [], "user_uids": ["root"]},
+    )
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_slug(self, slug: str):
+            assert slug == skill.slug
+            return skill
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    with pytest.raises(ValueError, match="不存在或无权访问"):
+        await svc.get_management_readable_skill_or_raise(None, _user("root", role="user"), skill.slug)
+
+
+@pytest.mark.asyncio
+async def test_runtime_access_still_excludes_disabled_shared_skill(monkeypatch: pytest.MonkeyPatch):
+    skill = Skill(
+        slug="shared-disabled",
+        name="shared-disabled",
+        description="",
+        created_by="other",
+        enabled=False,
+        share_config={"access_level": "user", "department_ids": [], "user_uids": ["root"]},
+    )
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def list_enabled(self):
+            return []
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    assert svc.user_can_access_skill(_user("root", role="user"), skill) is False
+    assert await svc.list_accessible_skills(None, _user("root", role="user")) == []
+
+
+@pytest.mark.asyncio
+async def test_normal_user_skill_upload_draft_defaults_to_user_share(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(svc.sys_config, "save_dir", str(tmp_path))
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def exists_slug(self, _slug: str) -> bool:
+            return False
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+
+    draft = await svc.prepare_skill_upload(
+        None,
+        filename="SKILL.md",
+        file_bytes=b"---\nname: demo\ndescription: demo skill\n---\n# Demo\n",
+        operator=_user("normal-user", role="user"),
+    )
+
+    assert draft["default_share_config"] == {
+        "access_level": "user",
+        "department_ids": [],
+        "user_uids": ["normal-user"],
+    }
+    assert draft["allowed_access_levels"] == ["user"]
+
+
+@pytest.mark.parametrize(
+    "share_config",
+    [
+        {"access_level": "global", "department_ids": [], "user_uids": []},
+        {"access_level": "department", "department_ids": [1], "user_uids": []},
+    ],
+)
+@pytest.mark.asyncio
+async def test_normal_user_confirm_skill_draft_rejects_wider_share_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    share_config: dict,
+):
+    monkeypatch.setattr(svc.sys_config, "save_dir", str(tmp_path))
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def exists_slug(self, _slug: str) -> bool:
+            return False
+
+        async def create(self, **_kwargs) -> Skill:
+            raise AssertionError("普通用户的越权共享范围应在创建前被拒绝")
+
+    monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
+    operator = _user("normal-user", role="user")
+    draft = await svc.prepare_skill_upload(
+        None,
+        filename="SKILL.md",
+        file_bytes=b"---\nname: demo\ndescription: demo skill\n---\n# Demo\n",
+        operator=operator,
+    )
+
+    with pytest.raises(ValueError, match="无权使用该 Skill 共享范围"):
+        await svc.confirm_skill_install_draft(
+            None,
+            draft_id=draft["draft_id"],
+            share_config=share_config,
+            operator=operator,
+        )
+
+
 def test_parse_skill_markdown_ok():
     content = "---\nname: demo-skill\ndescription: demo description\n---\n# Demo\n"
     name, desc, meta = svc._parse_skill_markdown(content)

@@ -135,22 +135,22 @@ const mainList = computed(() => {
     activeIcon: FolderKanban
   })
 
+  items.push({
+    name: '智能体扩展',
+    path: '/extensions?tab=skills',
+    activePaths: ['/extensions'],
+    icon: LibraryBig,
+    activeIcon: LibraryBig
+  })
+
+  items.push({
+    name: '智能体管理',
+    path: '/model-manage',
+    icon: Box,
+    activeIcon: Box
+  })
+
   if (userStore.isAdmin) {
-    items.push({
-      name: '智能体扩展',
-      path: '/extensions',
-      activePaths: ['/extensions'],
-      icon: LibraryBig,
-      activeIcon: LibraryBig
-    })
-
-    items.push({
-      name: '智能体管理',
-      path: '/model-manage',
-      icon: Box,
-      activeIcon: Box
-    })
-
     items.push({
       name: '数据总览',
       path: '/dashboard',

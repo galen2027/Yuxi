@@ -31,7 +31,7 @@
       <InfoCard
         v-for="tool in filteredTools"
         :key="getToolSlug(tool)"
-        :title="tool.name"
+        :title="formatExtensionCardTitle(tool.name)"
         :subtitle="getToolSlug(tool)"
         :description="tool.description || '无描述'"
         :default-icon="getToolIcon(getToolSlug(tool)) || WrenchIcon"
@@ -119,6 +119,7 @@ import { getToolIcon } from '@/components/ToolCallingResult/toolRegistry'
 import ExtensionCardGrid from './ExtensionCardGrid.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
 import PageShoulder from '@/components/shared/PageShoulder.vue'
+import { formatExtensionCardTitle } from '@/utils/extensionDisplayName'
 
 const WrenchIcon = Wrench
 

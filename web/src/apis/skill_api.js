@@ -1,12 +1,4 @@
-import {
-  apiGet,
-  apiPost,
-  apiDelete,
-  apiAdminGet,
-  apiAdminPost,
-  apiAdminPut,
-  apiAdminDelete
-} from './base'
+import { apiGet, apiPost, apiPut, apiDelete, apiAdminGet, apiAdminPost } from './base'
 
 const BASE_URL = '/api/system/skills'
 const USER_BASE_URL = '/api/skills'
@@ -49,7 +41,7 @@ export const discardSkillInstallDraft = async (draftId) => {
 
 export const getSkillDependencyOptions = async (slug) => {
   const query = slug ? `?slug=${encodeURIComponent(slug)}` : ''
-  return apiAdminGet(`${BASE_URL}/dependency-options${query}`)
+  return apiGet(`${BASE_URL}/dependency-options${query}`)
 }
 
 export const listBuiltinSkills = async () => {
@@ -61,53 +53,49 @@ export const syncBuiltinSkills = async () => {
 }
 
 export const getSkillTree = async (slug) => {
-  return apiAdminGet(`${BASE_URL}/${encodeURIComponent(slug)}/tree`)
+  return apiGet(`${BASE_URL}/${encodeURIComponent(slug)}/tree`)
 }
 
 export const getSkillFile = async (slug, path) => {
-  return apiAdminGet(
-    `${BASE_URL}/${encodeURIComponent(slug)}/file?path=${encodeURIComponent(path)}`
-  )
+  return apiGet(`${BASE_URL}/${encodeURIComponent(slug)}/file?path=${encodeURIComponent(path)}`)
 }
 
 export const createSkillFile = async (slug, payload) => {
-  return apiAdminPost(`${BASE_URL}/${encodeURIComponent(slug)}/file`, payload)
+  return apiPost(`${BASE_URL}/${encodeURIComponent(slug)}/file`, payload)
 }
 
 export const updateSkillFile = async (slug, payload) => {
-  return apiAdminPut(`${BASE_URL}/${encodeURIComponent(slug)}/file`, payload)
+  return apiPut(`${BASE_URL}/${encodeURIComponent(slug)}/file`, payload)
 }
 
 export const updateSkillDependencies = async (slug, payload) => {
-  return apiAdminPut(`${BASE_URL}/${encodeURIComponent(slug)}/dependencies`, payload)
+  return apiPut(`${BASE_URL}/${encodeURIComponent(slug)}/dependencies`, payload)
 }
 
 export const updateSkillShareConfig = async (slug, shareConfig) => {
-  return apiAdminPut(`${BASE_URL}/${encodeURIComponent(slug)}/share-config`, {
+  return apiPut(`${BASE_URL}/${encodeURIComponent(slug)}/share-config`, {
     share_config: shareConfig
   })
 }
 
 export const updateSkillEnabled = async (slug, enabled) => {
-  return apiAdminPut(`${BASE_URL}/${encodeURIComponent(slug)}/enabled`, { enabled })
+  return apiPut(`${BASE_URL}/${encodeURIComponent(slug)}/enabled`, { enabled })
 }
 
 export const deleteSkillFile = async (slug, path) => {
-  return apiAdminDelete(
-    `${BASE_URL}/${encodeURIComponent(slug)}/file?path=${encodeURIComponent(path)}`
-  )
+  return apiDelete(`${BASE_URL}/${encodeURIComponent(slug)}/file?path=${encodeURIComponent(path)}`)
 }
 
 export const exportSkill = async (slug) => {
-  return apiAdminGet(`${BASE_URL}/${encodeURIComponent(slug)}/export`, {}, 'blob')
+  return apiGet(`${BASE_URL}/${encodeURIComponent(slug)}/export`, {}, true, 'blob')
 }
 
 export const deleteSkill = async (slug) => {
-  return apiAdminDelete(`${BASE_URL}/${encodeURIComponent(slug)}`)
+  return apiDelete(`${BASE_URL}/${encodeURIComponent(slug)}`)
 }
 
 export const deleteSkillsBatch = async (slugs) => {
-  return apiAdminPost(`${BASE_URL}/delete-batch`, { slugs })
+  return apiPost(`${BASE_URL}/delete-batch`, { slugs })
 }
 
 export const skillApi = {

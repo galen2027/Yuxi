@@ -11,16 +11,16 @@
     />
 
     <div v-if="!isDetailPage" class="extensions-content">
-      <div v-show="activeTab === 'knowledge'" class="tab-panel">
+      <div v-if="userStore.isAdmin && activeTab === 'knowledge'" class="tab-panel">
         <DataBaseView ref="knowledgeRef" embedded />
       </div>
-      <div v-show="activeTab === 'tools'" class="tab-panel">
+      <div v-if="userStore.isAdmin && activeTab === 'tools'" class="tab-panel">
         <ToolsCardList ref="toolsRef" />
       </div>
-      <div v-show="activeTab === 'skills'" class="tab-panel">
+      <div v-if="activeTab === 'skills'" class="tab-panel">
         <SkillCardList ref="skillsRef" />
       </div>
-      <div v-show="activeTab === 'mcp'" class="tab-panel">
+      <div v-if="userStore.isAdmin && activeTab === 'mcp'" class="tab-panel">
         <McpCardList ref="mcpRef" />
       </div>
     </div>
@@ -31,26 +31,37 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ToolsCardList from '@/components/extensions/ToolsCardList.vue'
 import McpCardList from '@/components/extensions/McpCardList.vue'
 import SkillCardList from '@/components/extensions/SkillCardList.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataBaseView from '@/views/DataBaseView.vue'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
-const activeTab = ref('knowledge')
+const router = useRouter()
+const userStore = useUserStore()
+const activeTab = ref('skills')
 const knowledgeRef = ref(null)
 const skillsRef = ref(null)
 const mcpRef = ref(null)
 const toolsRef = ref(null)
 
-const extensionTabs = [
+const adminExtensionTabs = [
   { key: 'knowledge', label: '知识库' },
   { key: 'tools', label: '工具' },
   { key: 'mcp', label: 'MCP' },
   { key: 'skills', label: 'Skills' }
 ]
+const userExtensionTabs = [{ key: 'skills', label: 'Skills' }]
+const extensionTabs = computed(() => (userStore.isAdmin ? adminExtensionTabs : userExtensionTabs))
+const allowedTabKeys = computed(() => extensionTabs.value.map((tab) => tab.key))
+
+const normalizeTab = (tab) => {
+  if (allowedTabKeys.value.includes(tab)) return tab
+  return userStore.isAdmin ? 'knowledge' : 'skills'
+}
 
 const isDetailPage = computed(() => {
   return (
@@ -72,14 +83,24 @@ const activeChildLoading = computed(() => {
 })
 
 watch(
-  () => route.query,
-  (query) => {
-    if (query.tab && ['knowledge', 'tools', 'skills', 'mcp'].includes(query.tab)) {
-      activeTab.value = query.tab
-    }
+  () => [route.query.tab, userStore.isAdmin],
+  ([tab]) => {
+    const nextTab = normalizeTab(tab)
+    if (activeTab.value !== nextTab) activeTab.value = nextTab
+    if (route.query.tab !== nextTab) router.replace({ query: { ...route.query, tab: nextTab } })
   },
   { immediate: true }
 )
+
+watch(activeTab, (tab) => {
+  const nextTab = normalizeTab(tab)
+  if (nextTab !== tab) {
+    activeTab.value = nextTab
+    return
+  }
+  if (route.query.tab === nextTab) return
+  router.replace({ query: { ...route.query, tab: nextTab } })
+})
 </script>
 
 <style scoped lang="less">

@@ -73,18 +73,16 @@
                     当前对话已绑定智能体，新对话可切换。
                   </div>
 
-                  <template v-if="userStore.isAdmin">
-                    <div class="config-dropdown-divider"></div>
+                  <div class="config-dropdown-divider"></div>
 
-                    <button
-                      type="button"
-                      class="config-dropdown-item action-item"
-                      @click="openAgentManagement"
-                    >
-                      <Settings2 :size="15" class="config-dropdown-item-icon" />
-                      <span class="config-dropdown-item-label">管理智能体</span>
-                    </button>
-                  </template>
+                  <button
+                    type="button"
+                    class="config-dropdown-item action-item"
+                    @click="openAgentManagement"
+                  >
+                    <Settings2 :size="15" class="config-dropdown-item-icon" />
+                    <span class="config-dropdown-item-label">管理智能体</span>
+                  </button>
                 </div>
               </template>
             </a-dropdown>

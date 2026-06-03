@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import {
   Plus,
@@ -52,6 +52,7 @@ const agentModalActiveTab = ref('basic')
 const agentIconUploading = ref(false)
 const agentShareConfigFormRef = ref(null)
 const runtimeConfigFormRef = ref(null)
+const agentNameInputRef = ref(null)
 const agentShareConfig = ref({ access_level: 'user', department_ids: [], user_uids: [] })
 const agentForm = reactive({
   slug: '',
@@ -142,6 +143,7 @@ const canManageAgent = (agent) => !!agent?.can_manage
 const agentModalTitle = computed(() => (editingAgentId.value ? '编辑智能体' : '新增智能体'))
 const getAgentIconSrc = (agent) => agent.icon || (agent.id ? generatePixelAvatar(agent.id) : '')
 const getAgentTags = (agent) => [
+  ...(!agent?.can_manage ? [{ name: '只读', color: 'default' }] : []),
   ...(agent?.is_subagent ? [{ name: '子智能体', color: 'purple' }] : []),
   ...(agent?.backend_id ? [{ name: agent.backend_id, color: 'blue' }] : [])
 ]
@@ -195,6 +197,15 @@ const resetAgentForm = () => {
     icon: ''
   })
   agentShareConfig.value = getInitialShareConfig()
+}
+
+const focusAgentNameInput = async () => {
+  await nextTick()
+  agentNameInputRef.value?.focus?.()
+}
+
+const handleAgentModalAfterOpenChange = (open) => {
+  if (open && !editingAgentId.value) focusAgentNameInput()
 }
 
 const openCreateAgentModal = () => {
@@ -444,10 +455,11 @@ defineExpose({
     <a-modal
       v-model:open="showAgentModal"
       class="agent-edit-modal"
-      :width="920"
+      :width="editingAgentId ? 840 : 760"
       :footer="null"
       :closable="false"
       @cancel="closeAgentModal"
+      @after-open-change="handleAgentModalAfterOpenChange"
     >
       <template #title>
         <div class="agent-modal-titlebar">
@@ -458,7 +470,13 @@ defineExpose({
           </div>
         </div>
       </template>
-      <div class="agent-modal-content" :class="{ 'without-sidebar': !showAgentModalSidebar }">
+      <div
+        class="agent-modal-content"
+        :class="{
+          'without-sidebar': !showAgentModalSidebar,
+          'create-mode': !editingAgentId
+        }"
+      >
         <aside v-if="showAgentModalSidebar" class="agent-modal-sidebar" aria-label="智能体配置分组">
           <button
             v-for="item in agentModalMenuItems"
@@ -490,21 +508,28 @@ defineExpose({
                     :disabled="agentIconUploading"
                     accept="image/*"
                   >
-                    <div class="agent-icon-upload" :class="{ uploading: agentIconUploading }">
+                    <div
+                      class="agent-icon-upload"
+                      :class="{
+                        uploading: agentIconUploading,
+                        'is-empty': !agentPreviewIcon
+                      }"
+                    >
                       <img
                         v-if="agentPreviewIcon"
                         :src="agentPreviewIcon"
                         :alt="`${agentForm.name || '智能体'}图标`"
                       />
                       <div class="agent-icon-mask">
-                        <RefreshCw v-if="agentIconUploading" :size="14" class="spinning" />
-                        <Upload v-else :size="14" />
-                        <span>{{ agentForm.icon ? '更换' : '上传' }}</span>
+                        <RefreshCw v-if="agentIconUploading" :size="16" class="spinning" />
+                        <Upload v-else :size="16" />
+                        <span>{{ agentForm.icon ? '更换图标' : '上传图标' }}</span>
                       </div>
                     </div>
                   </a-upload>
                   <div class="agent-icon-preview-text">
                     <input
+                      ref="agentNameInputRef"
                       v-model="agentForm.name"
                       class="agent-inline-name-input"
                       type="text"
@@ -675,6 +700,11 @@ defineExpose({
   &.without-sidebar {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  &.create-mode {
+    border-color: var(--gray-300);
+    box-shadow: 0 10px 28px var(--shadow-1);
+  }
 }
 
 .agent-modal-sidebar {
@@ -807,10 +837,6 @@ defineExpose({
   width: 100%;
   min-width: 0;
   gap: 16px;
-  padding: 10px 12px 10px 10px;
-  border: 1px solid var(--gray-150);
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--gray-0), var(--main-10));
 
   :deep(.ant-upload) {
     display: block;
@@ -826,13 +852,19 @@ defineExpose({
 
 .agent-icon-upload {
   position: relative;
-  width: 48px;
-  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
   overflow: hidden;
-  border: 1px solid var(--gray-150);
-  border-radius: 8px;
-  background: var(--gray-0);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  background: var(--gray-25);
   cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
 
   img {
     display: block;
@@ -841,9 +873,23 @@ defineExpose({
     object-fit: cover;
   }
 
+  &:hover,
+  &:focus-within,
+  &.uploading {
+    border-color: var(--main-300);
+    box-shadow: 0 0 0 3px var(--main-50);
+  }
+
   &:hover .agent-icon-mask,
-  &.uploading .agent-icon-mask {
+  &:focus-within .agent-icon-mask,
+  &.uploading .agent-icon-mask,
+  &.is-empty .agent-icon-mask {
     opacity: 1;
+  }
+
+  &.is-empty {
+    border-style: dashed;
+    background: var(--gray-0);
   }
 }
 
@@ -854,12 +900,18 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  background: rgba(0, 0, 0, 0.48);
+  gap: 4px;
+  background: color-mix(in srgb, var(--gray-900) 62%, transparent);
   color: var(--gray-0);
   font-size: 11px;
+  font-weight: 600;
   opacity: 0;
   transition: opacity 0.16s ease;
+}
+
+.agent-icon-upload.is-empty .agent-icon-mask {
+  background: transparent;
+  color: var(--gray-600);
 }
 
 .agent-icon-preview-text {
@@ -878,18 +930,28 @@ defineExpose({
   border-radius: 6px;
   background: transparent;
   color: var(--gray-900);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
+  caret-color: var(--main-700);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
 
   &::placeholder {
     color: var(--gray-400);
   }
 
-  &:hover,
-  &:focus {
-    border-color: var(--main-200);
+  &:hover {
+    border-color: var(--gray-300);
     background: var(--gray-0);
+  }
+
+  &:focus {
+    border-color: var(--main-300);
+    background: var(--gray-0);
+    box-shadow: 0 0 0 3px var(--main-50);
     outline: none;
   }
 }
@@ -917,7 +979,7 @@ defineExpose({
 
   &:hover,
   &:focus {
-    border-color: var(--main-200);
+    border-color: var(--gray-300);
     background: var(--gray-0);
     outline: none;
   }
@@ -928,13 +990,13 @@ defineExpose({
   align-items: center;
   flex-shrink: 0;
   gap: 10px;
-  min-width: 220px;
+  width: 190px;
   min-height: 56px;
   padding: 10px 12px;
-  border: 1px solid var(--main-100);
+  border: 1px solid var(--gray-200);
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--gray-0), var(--main-10));
-  color: var(--main-700);
+  background: var(--gray-25);
+  color: var(--gray-700);
 
   &.editable {
     padding-right: 8px;
@@ -949,8 +1011,8 @@ defineExpose({
   width: 32px;
   height: 32px;
   border-radius: 10px;
-  background: var(--main-50);
-  color: var(--main-700);
+  background: var(--gray-100);
+  color: var(--gray-700);
 }
 
 .agent-backend-text {
@@ -968,7 +1030,7 @@ defineExpose({
 }
 
 .agent-backend-name {
-  max-width: 180px;
+  max-width: 128px;
   overflow: hidden;
   color: var(--gray-900);
   font-size: 13px;
@@ -978,7 +1040,7 @@ defineExpose({
 }
 
 .agent-backend-select {
-  width: 170px;
+  width: 128px;
   margin: -3px 0 -5px -11px;
 
   :deep(.ant-select-selector) {
@@ -1091,6 +1153,12 @@ defineExpose({
   }
 
   .agent-backend-summary {
+    width: 100%;
+  }
+
+  .agent-backend-select,
+  .agent-backend-name {
+    max-width: none;
     width: 100%;
   }
 

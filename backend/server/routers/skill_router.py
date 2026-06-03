@@ -20,12 +20,14 @@ from yuxi.agents.skills.service import (
     export_skill_zip,
     get_allowed_skill_access_levels,
     get_manageable_skill_or_raise,
+    get_management_readable_skill_or_raise,
     get_skill_dependency_options,
     get_skill_tree,
     init_builtin_skills,
+    is_builtin_skill,
     list_accessible_skills,
-    list_manageable_skills,
     list_skills,
+    list_visible_skills_for_management,
     prepare_remote_skill_install,
     prepare_skill_upload,
     read_skill_file,
@@ -33,6 +35,7 @@ from yuxi.agents.skills.service import (
     update_skill_enabled,
     update_skill_file,
     update_skill_share_config,
+    user_can_manage_skill,
 )
 from yuxi.agents.skills.remote_install import list_remote_skills, search_remote_skills
 from yuxi.storage.postgres.models_business import User
@@ -108,6 +111,13 @@ def _summarize_results(results: list[dict]) -> dict[str, int]:
     }
 
 
+def _serialize_skill_for_user(item, user: User) -> dict:
+    data = item.to_dict()
+    data["can_manage"] = user_can_manage_skill(user, item)
+    data["is_builtin"] = is_builtin_skill(item)
+    return data
+
+
 @user_skills.get("/accessible")
 async def list_accessible_skills_route(
     current_user: User = Depends(get_required_user),
@@ -115,7 +125,7 @@ async def list_accessible_skills_route(
 ):
     try:
         items = await list_accessible_skills(db, current_user)
-        return {"success": True, "data": [item.to_dict() for item in items]}
+        return {"success": True, "data": [_serialize_skill_for_user(item, current_user) for item in items]}
     except Exception as e:
         logger.error(f"Failed to list accessible skills: {e}")
         raise HTTPException(status_code=500, detail="获取可访问 Skills 失败")
@@ -227,10 +237,10 @@ async def list_skills_route(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        items = await list_manageable_skills(db, current_user)
+        items = await list_visible_skills_for_management(db, current_user)
         return {
             "success": True,
-            "data": [item.to_dict() for item in items],
+            "data": [_serialize_skill_for_user(item, current_user) for item in items],
             "allowed_access_levels": get_allowed_skill_access_levels(current_user),
         }
     except Exception as e:
@@ -294,7 +304,7 @@ async def update_skill_share_config_route(
 ):
     try:
         item = await update_skill_share_config(db, slug=slug, share_config=payload.share_config, operator=current_user)
-        return {"success": True, "data": item.to_dict()}
+        return {"success": True, "data": _serialize_skill_for_user(item, current_user)}
     except ValueError as e:
         _raise_from_value_error(e)
     except Exception as e:
@@ -311,7 +321,7 @@ async def update_skill_enabled_route(
 ):
     try:
         item = await update_skill_enabled(db, slug=slug, enabled=payload.enabled, operator=current_user)
-        return {"success": True, "data": item.to_dict()}
+        return {"success": True, "data": _serialize_skill_for_user(item, current_user)}
     except ValueError as e:
         _raise_from_value_error(e)
     except Exception as e:
@@ -326,7 +336,7 @@ async def get_skill_tree_route(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        await get_manageable_skill_or_raise(db, current_user, slug)
+        await get_management_readable_skill_or_raise(db, current_user, slug)
         return {"success": True, "data": await get_skill_tree(db, slug)}
     except ValueError as e:
         _raise_from_value_error(e)
@@ -343,7 +353,7 @@ async def get_skill_file_route(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        await get_manageable_skill_or_raise(db, current_user, slug)
+        await get_management_readable_skill_or_raise(db, current_user, slug)
         return {"success": True, "data": await read_skill_file(db, slug, path)}
     except ValueError as e:
         _raise_from_value_error(e)
@@ -417,7 +427,7 @@ async def update_skill_dependencies_route(
             skill_dependencies=payload.skill_dependencies,
             operator=current_user,
         )
-        return {"success": True, "data": item.to_dict()}
+        return {"success": True, "data": _serialize_skill_for_user(item, current_user)}
     except ValueError as e:
         _raise_from_value_error(e)
     except Exception as e:
